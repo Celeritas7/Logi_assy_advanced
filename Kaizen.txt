@@ -1,0 +1,8 @@
+I want a universal chatbot which will be adaptable to the database input I will give to it.
+
+
+I should have been able generate new block inside my database, check status of tasks inside my database with question. Should be able to change the status of tasks inside my database. If there will be any reason bcz of which I can't work on any task I should have been able to write the note for reason bcz of which the task to be kept on hold.
+
+I'm still now sure how I can add a child to perticular parent using this chatbot. So keep this point on hold. We will discuss it while creating the chatbot.
+
+
