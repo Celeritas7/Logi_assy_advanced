@@ -801,8 +801,7 @@
 const SUPABASE_URL = 'https://wylxvmkcrexwfpjpbhyy.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind5bHh2bWtjcmV4d2ZwanBiaHl5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg2MzkxMDYsImV4cCI6MjA4NDIxNTEwNn0.6Bxo42hx4jwlJGWnfjiTpiDUsYfc1QLTN3YtrU1efak';
 
-// Create Supabase client (using 'db' to avoid conflict with library's global 'supabase')
-const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 // ============================================================
 // CONSTANTS
@@ -884,7 +883,7 @@ async function init() {
 
 async function testConnection() {
   try {
-    const { data, error } = await db
+    const { data, error } = await supabase
       .from('logi_assemblies')
       .select('id')
       .limit(1);
@@ -910,7 +909,7 @@ function updateDbIndicator(connected) {
 // DATA LOADING
 // ============================================================
 async function loadAssemblies() {
-  const { data, error } = await db
+  const { data, error } = await supabase
     .from('logi_assemblies')
     .select('*')
     .order('name');
@@ -942,7 +941,7 @@ async function loadAssemblyData(assemblyId) {
   setStatus('Loading...', 'loading');
   
   // Load nodes
-  const { data: nodesData, error: nodesError } = await db
+  const { data: nodesData, error: nodesError } = await supabase
     .from('logi_nodes')
     .select('*')
     .eq('assembly_id', assemblyId)
@@ -956,7 +955,7 @@ async function loadAssemblyData(assemblyId) {
   }
   
   // Load links
-  const { data: linksData, error: linksError } = await db
+  const { data: linksData, error: linksError } = await supabase
     .from('logi_links')
     .select('*')
     .eq('assembly_id', assemblyId)
@@ -1790,7 +1789,7 @@ async function saveNodeEdit(nodeId) {
     updated_at: new Date().toISOString()
   };
   
-  const { error } = await db
+  const { error } = await supabase
     .from('logi_nodes')
     .update(updates)
     .eq('id', nodeId);
@@ -1862,7 +1861,7 @@ async function saveLinkEdit(linkId) {
     updated_at: new Date().toISOString()
   };
   
-  const { error } = await db
+  const { error } = await supabase
     .from('logi_links')
     .update(updates)
     .eq('id', linkId);
@@ -1899,7 +1898,7 @@ async function addChildNode(parentId) {
   if (!newName) return;
   
   // Create node
-  const { data: newNode, error: nodeError } = await db
+  const { data: newNode, error: nodeError } = await supabase
     .from('logi_nodes')
     .insert({
       assembly_id: currentAssemblyId,
@@ -1918,7 +1917,7 @@ async function addChildNode(parentId) {
   }
   
   // Create link
-  const { error: linkError } = await db
+  const { error: linkError } = await supabase
     .from('logi_links')
     .insert({
       assembly_id: currentAssemblyId,
@@ -1953,7 +1952,7 @@ function confirmDeleteNode(nodeId) {
 async function deleteNode(nodeId) {
   hideModal();
   
-  const { error } = await db.rpc('delete_logi_node', { p_node_id: nodeId });
+  const { error } = await supabase.rpc('delete_logi_node', { p_node_id: nodeId });
   
   if (error) {
     showToast('Failed to delete node', 'error');
@@ -1985,7 +1984,7 @@ async function deleteLink(linkId) {
   const link = links.find(l => l.id === linkId);
   
   // Soft delete the link
-  const { error: linkError } = await db
+  const { error: linkError } = await supabase
     .from('logi_links')
     .update({ deleted: true, updated_at: new Date().toISOString() })
     .eq('id', linkId);
@@ -2001,7 +2000,7 @@ async function deleteLink(linkId) {
   
   if (otherLinks.length === 0) {
     // Mark as orphan
-    await db
+    await supabase
       .from('logi_nodes')
       .update({ is_orphan: true, updated_at: new Date().toISOString() })
       .eq('id', link.child_id);
@@ -2018,7 +2017,7 @@ async function duplicateNode(nodeId) {
   if (!node) return;
   
   // Create copy
-  const { data: newNode, error } = await db
+  const { data: newNode, error } = await supabase
     .from('logi_nodes')
     .insert({
       assembly_id: currentAssemblyId,
@@ -2044,7 +2043,7 @@ async function duplicateNode(nodeId) {
   for (const targetId of node.goesInto) {
     const link = links.find(l => l.child_id === nodeId && l.parent_id === targetId);
     if (link) {
-      await db
+      await supabase
         .from('logi_links')
         .insert({
           assembly_id: currentAssemblyId,
@@ -2074,7 +2073,7 @@ async function saveAllPositions() {
   
   // Update positions in batches
   for (const pos of positions) {
-    await db
+    await supabase
       .from('logi_nodes')
       .update({ x: pos.x, y: pos.y, updated_at: new Date().toISOString() })
       .eq('id', pos.id);
