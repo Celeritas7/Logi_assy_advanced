@@ -1,3 +1,48 @@
+Now just for a update. PhaseFeaturesPriorityPhase 1Supabase setup, create tables, migrate sample data🔴 HighPhase 2Load data from Supabase, display tree (read-only)🔴 HighPhase 3Right-click menu, Add/Edit/Delete nodes🔴 HighPhase 4Edit panel for node properties + fastener on links🔴 HighPhase 5Radial layout with arrow-aware positioning🟡 MediumPhase 6Shift+Drag for group movement🟡 MediumPhase 7Orphan reconnection (drag or menu)🟡 MediumPhase 8Export (PNG/SVG), Position save/load🟢 Low
+
+
+
+phase 1-4 are complete. If yes can you apply the next phases to app? I dont know whether you will apply phase indivisually or at a time.
+
+
+XXXXXXXXXXXXXXXXXXXXXXX
+
+
+
+
+
+
+I can add Child with option "Add child" but I cant delete any block after right click.
+
+Whenever I add new  child the block positions which I fix get disturbed after it.
+
+To resolve it I want a option to lock the block position. Once locked that block will move only when its parent moved. The position of the child block and parent block should be fixed after locked.
+
+
+
+
+
+
+
+
+
+
+
+XXXXXXXXXXXXXXXXXXXX
+
+Want the implementation of the logic, 
+
+
+
+
+
+
+
+
+
+
+XXXXXXXXXXXXXX
+
 I want a universal chatbot which will be adaptable to the database input I will give to it.
 
 

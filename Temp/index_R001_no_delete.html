@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Logi Assembly Tree v15</title>
+  <title>Logi Assembly Tree</title>
   <script src="https://d3js.org/d3.v7.min.js"></script>
   <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
   <style>
@@ -251,18 +251,6 @@
 
     .node.selected .node-shape {
       filter: drop-shadow(0 0 8px rgba(52, 152, 219, 0.8));
-    }
-
-    .node.drop-target .node-shape {
-      filter: drop-shadow(0 0 12px rgba(39, 174, 96, 0.9)) !important;
-    }
-
-    .node.child-highlight .node-shape {
-      filter: drop-shadow(0 0 6px rgba(155, 89, 182, 0.7));
-    }
-
-    .node.dragging-children .node-shape {
-      filter: drop-shadow(0 0 10px rgba(155, 89, 182, 0.9));
     }
 
     .node-shape {
@@ -680,7 +668,7 @@
 
 <!-- Header -->
 <div class="header">
-  <h1>⚙️ Logi Assembly v15</h1>
+  <h1>⚙️ Logi Assembly</h1>
   
   <div class="control-group">
     <label>Assembly:</label>
@@ -713,15 +701,7 @@
     </select>
   </div>
   
-  <div class="control-group">
-    <label>Layout:</label>
-    <select id="layoutMode">
-      <option value="force">Force</option>
-      <option value="radial">Radial (L3+)</option>
-    </select>
-  </div>
-  
-  <button class="header-btn" onclick="refreshData()">🔄</button>
+  <button class="header-btn" onclick="refreshData()">🔄 Refresh</button>
   <button class="header-btn" onclick="expandAll()">➕</button>
   <button class="header-btn" onclick="collapseAll()">➖</button>
   <button class="header-btn save-btn" onclick="saveAllPositions()">💾 Save</button>
@@ -763,13 +743,7 @@
     <div class="legend-item"><div class="legend-color" style="background:#27ae60;"></div>Done</div>
     <div class="legend-item"><div class="legend-color" style="background:#f1c40f;"></div>WIP</div>
     <div class="legend-item"><div class="legend-color" style="background:#e74c3c;"></div>Blocked</div>
-    <div class="legend-item"><div class="legend-color" style="background:#9b59b6; border-style:dashed;"></div>Orphan</div>
-  </div>
-  
-  <div class="legend-divider"></div>
-  
-  <div class="legend-section">
-    <span style="color:#666; font-size:9px;">💡 Shift+Drag = move with children | Drag orphan to node = reconnect</span>
+    <div class="legend-item"><div class="legend-color" style="background:#9b59b6;"></div>Orphan</div>
   </div>
 </div>
 
@@ -881,13 +855,7 @@ let selectedNode = null;
 let selectedLink = null;
 let currentColorMode = 'level';
 let currentLevelFilter = 'all';
-let currentLayoutMode = 'force';
 let shiftKeyPressed = false;
-let draggingOrphan = null;
-let dropTarget = null;
-
-const RADIAL_RADIUS = 120;
-const RADIAL_DEAD_ZONE = 60;
 
 // ============================================================
 // INITIALIZATION
@@ -1176,78 +1144,6 @@ function getNodeColor(node) {
   return LEVEL_COLORS[Math.min(node.level - 1, 7)];
 }
 
-function getAllDescendants(nodeId) {
-  const descendants = new Set();
-  const queue = [...(nodes.find(n => n.id === nodeId)?.receivesFrom || [])];
-  
-  while (queue.length > 0) {
-    const childId = queue.shift();
-    if (descendants.has(childId)) continue;
-    descendants.add(childId);
-    const child = nodes.find(n => n.id === childId);
-    if (child) {
-      queue.push(...child.receivesFrom);
-    }
-  }
-  return descendants;
-}
-
-// ============================================================
-// RADIAL LAYOUT
-// ============================================================
-function calculateRadialPositions(parentNode, children, grandparentNode) {
-  if (children.length === 0) return;
-  
-  // Reference angle from parent to grandparent (0° default: right)
-  let refAngle = 0;
-  if (grandparentNode) {
-    const dx = grandparentNode.x - parentNode.x;
-    const dy = grandparentNode.y - parentNode.y;
-    refAngle = Math.atan2(dy, dx) * (180 / Math.PI);
-  }
-  
-  // Dead zone around parent-grandparent arrow
-  const deadZoneHalf = RADIAL_DEAD_ZONE / 2;
-  const startAngle = refAngle + deadZoneHalf + 180;
-  const availableArc = 360 - RADIAL_DEAD_ZONE;
-  const angleStep = availableArc / Math.max(children.length, 1);
-  
-  children.forEach((child, index) => {
-    const angle = startAngle + (index + 0.5) * angleStep;
-    const radians = angle * (Math.PI / 180);
-    const levelDiff = Math.abs((child.level || 1) - (parentNode.level || 1));
-    const radius = RADIAL_RADIUS * (1 + levelDiff * 0.3);
-    
-    child.x = parentNode.x + radius * Math.cos(radians);
-    child.y = parentNode.y + radius * Math.sin(radians);
-    child.fx = child.x;
-    child.fy = child.y;
-  });
-}
-
-function applyRadialLayout(visibleNodes, nodeMap) {
-  const processedChildren = new Set();
-  const sortedNodes = [...visibleNodes].sort((a, b) => (b.level || 0) - (a.level || 0));
-  
-  sortedNodes.forEach(node => {
-    if (node.level >= 3 && node.receivesFrom.length > 0) {
-      const children = node.receivesFrom
-        .map(id => nodeMap.get(id))
-        .filter(c => c && !processedChildren.has(c.id));
-      
-      if (children.length === 0) return;
-      
-      let grandparent = null;
-      if (node.goesInto.length > 0) {
-        grandparent = nodeMap.get(node.goesInto[0]);
-      }
-      
-      calculateRadialPositions(node, children, grandparent);
-      children.forEach(c => processedChildren.add(c.id));
-    }
-  });
-}
-
 // ============================================================
 // UI HELPERS
 // ============================================================
@@ -1494,21 +1390,13 @@ function renderGraph() {
     }
   });
   
-  // Apply radial layout if selected
-  if (currentLayoutMode === 'radial') {
-    applyRadialLayout(visibleNodes, nodeMap);
-  }
-  
-  // Create simulation with layout-dependent strengths
-  const xStrength = currentLayoutMode === 'radial' ? 0.03 : 0.15;
-  const yStrength = currentLayoutMode === 'radial' ? 0.02 : 0.05;
-  
+  // Create simulation
   simulation = d3.forceSimulation(visibleNodes)
     .force('link', d3.forceLink(simLinks).id(d => d.id).distance(120).strength(0.3))
     .force('charge', d3.forceManyBody().strength(-200))
     .force('collide', d3.forceCollide().radius(d => Math.max(d.width, d.height) / 2 + 10).strength(0.8))
-    .force('x', d3.forceX(d => margin.left + (d.level - 1) * levelSpacing).strength(xStrength))
-    .force('y', d3.forceY(height / 2).strength(yStrength))
+    .force('x', d3.forceX(d => margin.left + (d.level - 1) * levelSpacing).strength(0.15))
+    .force('y', d3.forceY(height / 2).strength(0.05))
     .alphaDecay(0.03)
     .velocityDecay(0.4);
   
@@ -1580,19 +1468,6 @@ function renderGraph() {
     .on('contextmenu', (e, d) => {
       e.preventDefault();
       showNodeContextMenu(e, d);
-    })
-    .on('mouseenter', (e, d) => {
-      // Drop target highlighting for orphan reconnection
-      if (draggingOrphan && draggingOrphan.id !== d.id && !d.is_orphan) {
-        dropTarget = d;
-        d3.select(e.currentTarget).classed('drop-target', true);
-      }
-    })
-    .on('mouseleave', (e, d) => {
-      if (draggingOrphan) {
-        dropTarget = null;
-        d3.select(e.currentTarget).classed('drop-target', false);
-      }
     });
   
   // Draw shapes
@@ -1716,66 +1591,47 @@ function dragStarted(e, d) {
   if (!e.active) simulation.alphaTarget(0.1).restart();
   d.fx = d.x;
   d.fy = d.y;
-  
-  // Track dragging orphan for reconnection
-  if (d.is_orphan) {
-    draggingOrphan = d;
-  }
-  
-  // Highlight children if shift is held
-  if (shiftKeyPressed && !d.is_orphan) {
-    const descendants = getAllDescendants(d.id);
-    d3.selectAll('.node').filter(n => descendants.has(n.id)).classed('child-highlight', true);
-    d3.select(e.sourceEvent.target.closest('.node')).classed('dragging-children', true);
-  }
 }
 
 function dragged(e, d) {
-  const dx = e.x - d.x;
-  const dy = e.y - d.y;
-  
   d.fx = e.x;
   d.fy = e.y;
-  d.x = e.x;
-  d.y = e.y;
   
   // If shift is held, move children too
-  if (shiftKeyPressed && !d.is_orphan) {
+  if (shiftKeyPressed) {
+    const dx = e.x - d.x;
+    const dy = e.y - d.y;
     moveDescendants(d.id, dx, dy);
   }
+  
+  d.x = e.x;
+  d.y = e.y;
 }
 
 function dragEnded(e, d) {
   if (!e.active) simulation.alphaTarget(0);
   d.fx = d.x;
   d.fy = d.y;
-  
-  // Handle orphan reconnection
-  if (draggingOrphan && dropTarget) {
-    reconnectOrphan(draggingOrphan.id, dropTarget.id);
-  }
-  
-  // Clear all drag states
-  draggingOrphan = null;
-  dropTarget = null;
-  d3.selectAll('.node')
-    .classed('drop-target', false)
-    .classed('child-highlight', false)
-    .classed('dragging-children', false);
 }
 
 function moveDescendants(nodeId, dx, dy) {
-  const descendants = getAllDescendants(nodeId);
+  const visited = new Set([nodeId]);
+  const queue = [...(nodes.find(n => n.id === nodeId)?.receivesFrom || [])];
   
-  descendants.forEach(childId => {
+  while (queue.length > 0) {
+    const childId = queue.shift();
+    if (visited.has(childId)) continue;
+    visited.add(childId);
+    
     const child = nodes.find(n => n.id === childId);
     if (child) {
       child.x += dx;
       child.y += dy;
       child.fx = child.x;
       child.fy = child.y;
+      queue.push(...child.receivesFrom);
     }
-  });
+  }
 }
 
 // ============================================================
@@ -1817,7 +1673,7 @@ function clearSelection() {
 function showNodeContextMenu(e, node) {
   const menu = document.getElementById('contextMenu');
   
-  let menuHtml = `
+  menu.innerHTML = `
     <div class="context-menu-item" onclick="addChildNode('${node.id}')">
       <span class="context-menu-icon">➕</span> Add Child
     </div>
@@ -1827,55 +1683,15 @@ function showNodeContextMenu(e, node) {
     <div class="context-menu-item" onclick="duplicateNode('${node.id}')">
       <span class="context-menu-icon">📋</span> Duplicate
     </div>
-  `;
-  
-  // Add orphan reconnection option
-  if (node.is_orphan) {
-    menuHtml += `
-      <div class="context-menu-divider"></div>
-      <div class="context-menu-item" onclick="showReconnectSubmenu('${node.id}')">
-        <span class="context-menu-icon">🔗</span> Connect to Parent...
-      </div>
-    `;
-  }
-  
-  menuHtml += `
     <div class="context-menu-divider"></div>
     <div class="context-menu-item danger" onclick="confirmDeleteNode('${node.id}')">
       <span class="context-menu-icon">🗑️</span> Delete (Orphan Children)
     </div>
   `;
   
-  menu.innerHTML = menuHtml;
-  
-  const x = Math.min(e.clientX, window.innerWidth - 220);
-  const y = Math.min(e.clientY, window.innerHeight - 250);
-  menu.style.left = x + 'px';
-  menu.style.top = y + 'px';
+  menu.style.left = e.clientX + 'px';
+  menu.style.top = e.clientY + 'px';
   menu.classList.add('show');
-}
-
-function showReconnectSubmenu(orphanId) {
-  const orphan = nodes.find(n => n.id === orphanId);
-  const potentialParents = nodes.filter(n => 
-    !n.is_orphan && n.id !== orphanId && !n.deleted
-  ).sort((a, b) => a.name.localeCompare(b.name));
-  
-  let html = '<div style="max-height:200px;overflow-y:auto;padding:8px;">';
-  potentialParents.forEach(p => {
-    html += `<div style="padding:6px 10px;cursor:pointer;border-radius:4px;font-size:12px;" 
-      onmouseover="this.style.background='#e8e8e8'" 
-      onmouseout="this.style.background=''"
-      onclick="reconnectOrphan('${orphanId}', '${p.id}')">${p.name}</div>`;
-  });
-  html += '</div>';
-  
-  document.getElementById('contextMenu').innerHTML = `
-    <div style="padding:8px 16px;font-size:11px;font-weight:600;color:#666;border-bottom:1px solid #eee;">
-      Connect "${orphan?.name}" to:
-    </div>
-    ${html}
-  `;
 }
 
 function showLinkContextMenu(e, link) {
@@ -2117,38 +1933,6 @@ async function addChildNode(parentId) {
   }
   
   showToast('Node created', 'success');
-  await loadAssemblyData(currentAssemblyId);
-}
-
-async function reconnectOrphan(orphanId, newParentId) {
-  hideContextMenu();
-  
-  // Create new link
-  const { error: linkError } = await db
-    .from('logi_links')
-    .insert({
-      assembly_id: currentAssemblyId,
-      child_id: orphanId,
-      parent_id: newParentId
-    });
-  
-  if (linkError) {
-    showToast('Failed to create link', 'error');
-    console.error(linkError);
-    return;
-  }
-  
-  // Mark as no longer orphan
-  const { error: nodeError } = await db
-    .from('logi_nodes')
-    .update({ is_orphan: false, updated_at: new Date().toISOString() })
-    .eq('id', orphanId);
-  
-  if (nodeError) {
-    console.error('Failed to update orphan status:', nodeError);
-  }
-  
-  showToast('Orphan reconnected!', 'success');
   await loadAssemblyData(currentAssemblyId);
 }
 
@@ -2487,23 +2271,6 @@ function setupEventListeners() {
     renderGraph();
   });
   
-  // Layout mode
-  document.getElementById('layoutMode').addEventListener('change', (e) => {
-    currentLayoutMode = e.target.value;
-    // Reset positions for radial layout to apply fresh positioning
-    if (currentLayoutMode === 'radial') {
-      nodes.forEach(n => {
-        if (n.level >= 3) {
-          n.x = null;
-          n.y = null;
-          n.fx = null;
-          n.fy = null;
-        }
-      });
-    }
-    renderGraph();
-  });
-  
   // Click outside to close menus
   document.addEventListener('click', (e) => {
     if (!e.target.matches('.dropdown-btn')) {
@@ -2527,11 +2294,7 @@ function setupEventListeners() {
   });
   
   document.addEventListener('keyup', (e) => {
-    if (e.key === 'Shift') {
-      shiftKeyPressed = false;
-      // Clear visual highlights when shift is released
-      d3.selectAll('.node').classed('child-highlight', false).classed('dragging-children', false);
-    }
+    if (e.key === 'Shift') shiftKeyPressed = false;
   });
   
   // Escape to close panel
