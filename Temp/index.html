@@ -811,7 +811,9 @@
   
   <!-- Login/User area -->
   <div id="loginArea">
-    <button class="header-btn login-btn" id="loginBtn" onclick="handleLogin()">🔐 Admin</button>
+    <button class="header-btn login-btn" id="loginBtn" onclick="handleLogin()">
+      <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" style="width:14px;height:14px;"> Sign In
+    </button>
   </div>
   <div id="userBadge" class="user-badge" style="display:none;">
     <span id="userName"></span>
@@ -948,7 +950,7 @@ const NODE_WIDTH_MAX = 160;
 // ADMIN CONFIGURATION
 // ============================================================
 const ADMIN_EMAIL = 'mangaonkaraniket@gmail.com'; // Your email here
-const GOOGLE_CLIENT_ID = ''; // Add your Google Client ID here if using Google Sign-In
+const GOOGLE_CLIENT_ID = '960816882472-b3qjf15ehvab7mcuvf8154tveoub4sic.apps.googleusercontent.com';
 
 // ============================================================
 // GLOBAL STATE
@@ -979,50 +981,150 @@ const RADIAL_RADIUS = 120;
 const RADIAL_DEAD_ZONE = 60;
 
 // ============================================================
-// ADMIN / LOGIN FUNCTIONS
+// ADMIN / LOGIN FUNCTIONS (Google Sign-In)
 // ============================================================
-function checkAdminStatus() {
-  // Check localStorage for saved admin session
+let googleUser = null;
+
+function initGoogleSignIn() {
+  if (typeof google === 'undefined' || !google.accounts) {
+    console.log('Google Sign-In not loaded yet, retrying...');
+    setTimeout(initGoogleSignIn, 500);
+    return;
+  }
+  
+  google.accounts.id.initialize({
+    client_id: GOOGLE_CLIENT_ID,
+    callback: handleGoogleCallback,
+    auto_select: true, // Auto sign-in if previously logged in
+  });
+  
+  // Check if user was previously logged in
   const savedEmail = localStorage.getItem('logi_admin_email');
   if (savedEmail === ADMIN_EMAIL) {
-    isAdmin = true;
-    showAdminUI(savedEmail);
+    // Try to auto-login
+    google.accounts.id.prompt();
   }
 }
 
-function handleLogin() {
-  // Simple email-based admin check
-  const email = prompt('Enter admin email:');
-  if (!email) return;
+function handleGoogleCallback(response) {
+  // Decode the JWT token to get user info
+  const payload = decodeJwtPayload(response.credential);
   
-  if (email.toLowerCase().trim() === ADMIN_EMAIL.toLowerCase()) {
-    isAdmin = true;
-    localStorage.setItem('logi_admin_email', email);
-    showAdminUI(email);
-    showToast('Admin mode enabled', 'success');
-  } else {
-    showToast('Access denied. Not authorized.', 'error');
+  if (payload && payload.email) {
+    googleUser = payload;
+    
+    if (payload.email.toLowerCase() === ADMIN_EMAIL.toLowerCase()) {
+      isAdmin = true;
+      localStorage.setItem('logi_admin_email', payload.email);
+      showAdminUI(payload);
+      showToast(`Welcome, ${payload.name || 'Admin'}!`, 'success');
+    } else {
+      isAdmin = false;
+      showToast('Logged in as guest (view only)', 'info');
+      showGuestUI(payload);
+    }
   }
+}
+
+function decodeJwtPayload(token) {
+  try {
+    const base64Url = token.split('.')[1];
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
+      return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+    }).join(''));
+    return JSON.parse(jsonPayload);
+  } catch (e) {
+    console.error('Failed to decode JWT:', e);
+    return null;
+  }
+}
+
+function checkAdminStatus() {
+  // Initialize Google Sign-In
+  initGoogleSignIn();
+}
+
+function handleLogin() {
+  if (typeof google === 'undefined' || !google.accounts) {
+    showToast('Google Sign-In not loaded. Please refresh.', 'error');
+    return;
+  }
+  
+  // Show Google Sign-In prompt
+  google.accounts.id.prompt((notification) => {
+    if (notification.isNotDisplayed()) {
+      // Fallback: render button if prompt doesn't show
+      showGoogleButtonFallback();
+    }
+  });
+}
+
+function showGoogleButtonFallback() {
+  // Create a modal with Google Sign-In button
+  showModal(
+    'Sign In',
+    '<div id="googleButtonContainer" style="display:flex;justify-content:center;padding:20px;"></div>',
+    [{ label: 'Cancel', class: 'btn-secondary', action: hideModal }]
+  );
+  
+  // Render Google button in the container
+  setTimeout(() => {
+    const container = document.getElementById('googleButtonContainer');
+    if (container && google.accounts.id) {
+      google.accounts.id.renderButton(container, {
+        theme: 'outline',
+        size: 'large',
+        text: 'signin_with',
+        shape: 'rectangular'
+      });
+    }
+  }, 100);
 }
 
 function handleLogout() {
   isAdmin = false;
+  googleUser = null;
   localStorage.removeItem('logi_admin_email');
+  
+  // Revoke Google session
+  if (typeof google !== 'undefined' && google.accounts) {
+    google.accounts.id.disableAutoSelect();
+  }
+  
   hideAdminUI();
   showToast('Logged out', 'info');
 }
 
-function showAdminUI(email) {
+function showAdminUI(user) {
   document.querySelectorAll('.admin-only').forEach(el => el.classList.add('visible'));
   document.getElementById('loginBtn').style.display = 'none';
   document.getElementById('userBadge').style.display = 'flex';
-  document.getElementById('userName').textContent = '👤 Admin';
+  
+  // Show user name or email
+  const displayName = user.name || user.email.split('@')[0];
+  document.getElementById('userName').textContent = `👤 ${displayName}`;
+  document.getElementById('userName').title = user.email;
+}
+
+function showGuestUI(user) {
+  document.querySelectorAll('.admin-only').forEach(el => el.classList.remove('visible'));
+  document.getElementById('loginBtn').style.display = 'none';
+  document.getElementById('userBadge').style.display = 'flex';
+  document.getElementById('userBadge').style.background = 'rgba(52, 152, 219, 0.2)';
+  document.getElementById('userBadge').style.color = '#3498db';
+  
+  const displayName = user.name || user.email.split('@')[0];
+  document.getElementById('userName').textContent = `👁 ${displayName}`;
+  document.getElementById('userName').title = `${user.email} (Guest)`;
 }
 
 function hideAdminUI() {
   document.querySelectorAll('.admin-only').forEach(el => el.classList.remove('visible'));
   document.getElementById('loginBtn').style.display = 'flex';
   document.getElementById('userBadge').style.display = 'none';
+  document.getElementById('userBadge').style.background = '';
+  document.getElementById('userBadge').style.color = '';
 }
 
 // ============================================================
