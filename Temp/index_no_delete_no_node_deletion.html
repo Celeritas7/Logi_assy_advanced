@@ -3,10 +3,9 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Logi Assembly Tree v16</title>
+  <title>Logi Assembly Tree v15</title>
   <script src="https://d3js.org/d3.v7.min.js"></script>
   <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
-  <script src="https://accounts.google.com/gsi/client" async defer></script>
   <style>
     * {
       margin: 0;
@@ -90,58 +89,6 @@
 
     .header-btn.save-btn:hover {
       background: #1e8449;
-    }
-
-    .header-btn.undo-btn {
-      background: #f39c12;
-    }
-
-    .header-btn.undo-btn:hover {
-      background: #d68910;
-    }
-
-    .header-btn.undo-btn:disabled {
-      background: #7f8c8d;
-      cursor: not-allowed;
-      opacity: 0.5;
-    }
-
-    .admin-only {
-      display: none;
-    }
-
-    .admin-only.visible {
-      display: flex;
-    }
-
-    .admin-btn {
-      background: #9b59b6;
-    }
-
-    .admin-btn:hover {
-      background: #8e44ad;
-    }
-
-    .login-btn {
-      background: #e74c3c;
-      display: flex;
-      align-items: center;
-      gap: 5px;
-    }
-
-    .login-btn:hover {
-      background: #c0392b;
-    }
-
-    .user-badge {
-      background: rgba(39, 174, 96, 0.3);
-      color: #27ae60;
-      padding: 4px 8px;
-      border-radius: 4px;
-      font-size: 10px;
-      display: flex;
-      align-items: center;
-      gap: 5px;
     }
 
     .status-text {
@@ -304,19 +251,6 @@
 
     .node.selected .node-shape {
       filter: drop-shadow(0 0 8px rgba(52, 152, 219, 0.8));
-    }
-
-    .node.locked .node-shape {
-      stroke-width: 3px !important;
-    }
-
-    .node.locked::after {
-      content: '🔒';
-    }
-
-    .lock-indicator {
-      font-size: 8px;
-      pointer-events: none;
     }
 
     .node.drop-target .node-shape {
@@ -746,7 +680,7 @@
 
 <!-- Header -->
 <div class="header">
-  <h1>⚙️ Logi Assembly v16</h1>
+  <h1>⚙️ Logi Assembly v15</h1>
   
   <div class="control-group">
     <label>Assembly:</label>
@@ -779,8 +713,7 @@
     </select>
   </div>
   
-  <!-- Admin-only controls -->
-  <div class="control-group admin-only" id="layoutControl">
+  <div class="control-group">
     <label>Layout:</label>
     <select id="layoutMode">
       <option value="force">Force</option>
@@ -788,11 +721,10 @@
     </select>
   </div>
   
-  <button class="header-btn admin-only" id="refreshBtn" onclick="refreshUnlockedNodes()">🔄</button>
-  <button class="header-btn admin-only" id="expandBtn" onclick="expandAll()">➕</button>
-  <button class="header-btn admin-only" id="collapseBtn" onclick="collapseAll()">➖</button>
-  <button class="header-btn undo-btn admin-only" id="undoBtn" onclick="undoPositions()" disabled>↩️ Undo</button>
-  <button class="header-btn save-btn admin-only" id="saveBtn" onclick="saveAllPositions()">💾 Save</button>
+  <button class="header-btn" onclick="refreshData()">🔄</button>
+  <button class="header-btn" onclick="expandAll()">➕</button>
+  <button class="header-btn" onclick="collapseAll()">➖</button>
+  <button class="header-btn save-btn" onclick="saveAllPositions()">💾 Save</button>
   
   <div class="dropdown">
     <button class="header-btn dropdown-btn" onclick="toggleExportDropdown()">📤 Export ▼</button>
@@ -807,15 +739,6 @@
   <div id="dbIndicator" class="db-indicator">
     <span class="db-dot"></span>
     <span>Supabase</span>
-  </div>
-  
-  <!-- Login/User area -->
-  <div id="loginArea">
-    <button class="header-btn login-btn" id="loginBtn" onclick="handleLogin()">🔐 Admin</button>
-  </div>
-  <div id="userBadge" class="user-badge" style="display:none;">
-    <span id="userName"></span>
-    <button class="header-btn" style="padding:2px 6px;font-size:9px;" onclick="handleLogout()">✕</button>
   </div>
 </div>
 
@@ -845,8 +768,8 @@
   
   <div class="legend-divider"></div>
   
-  <div class="legend-section admin-only" id="legendTips">
-    <span style="color:#666; font-size:9px;">💡 Shift+Drag = move with children | Drag orphan = reconnect | 🔒 = locked position</span>
+  <div class="legend-section">
+    <span style="color:#666; font-size:9px;">💡 Shift+Drag = move with children | Drag orphan to node = reconnect</span>
   </div>
 </div>
 
@@ -945,12 +868,6 @@ const NODE_WIDTH_BASE = 120;
 const NODE_WIDTH_MAX = 160;
 
 // ============================================================
-// ADMIN CONFIGURATION
-// ============================================================
-const ADMIN_EMAIL = 'aniketkumar7256@gmail.com'; // Your email here
-const GOOGLE_CLIENT_ID = ''; // Add your Google Client ID here if using Google Sign-In
-
-// ============================================================
 // GLOBAL STATE
 // ============================================================
 let assemblies = [];
@@ -969,178 +886,14 @@ let shiftKeyPressed = false;
 let draggingOrphan = null;
 let dropTarget = null;
 
-// Admin and position control
-let isAdmin = false;
-let lockedNodes = new Set(); // Nodes with locked positions
-let positionHistory = []; // For undo functionality
-const MAX_UNDO_HISTORY = 20;
-
 const RADIAL_RADIUS = 120;
 const RADIAL_DEAD_ZONE = 60;
-
-// ============================================================
-// ADMIN / LOGIN FUNCTIONS
-// ============================================================
-function checkAdminStatus() {
-  // Check localStorage for saved admin session
-  const savedEmail = localStorage.getItem('logi_admin_email');
-  if (savedEmail === ADMIN_EMAIL) {
-    isAdmin = true;
-    showAdminUI(savedEmail);
-  }
-}
-
-function handleLogin() {
-  // Simple email-based admin check
-  const email = prompt('Enter admin email:');
-  if (!email) return;
-  
-  if (email.toLowerCase().trim() === ADMIN_EMAIL.toLowerCase()) {
-    isAdmin = true;
-    localStorage.setItem('logi_admin_email', email);
-    showAdminUI(email);
-    showToast('Admin mode enabled', 'success');
-  } else {
-    showToast('Access denied. Not authorized.', 'error');
-  }
-}
-
-function handleLogout() {
-  isAdmin = false;
-  localStorage.removeItem('logi_admin_email');
-  hideAdminUI();
-  showToast('Logged out', 'info');
-}
-
-function showAdminUI(email) {
-  document.querySelectorAll('.admin-only').forEach(el => el.classList.add('visible'));
-  document.getElementById('loginBtn').style.display = 'none';
-  document.getElementById('userBadge').style.display = 'flex';
-  document.getElementById('userName').textContent = '👤 Admin';
-}
-
-function hideAdminUI() {
-  document.querySelectorAll('.admin-only').forEach(el => el.classList.remove('visible'));
-  document.getElementById('loginBtn').style.display = 'flex';
-  document.getElementById('userBadge').style.display = 'none';
-}
-
-// ============================================================
-// POSITION HISTORY (UNDO)
-// ============================================================
-function savePositionSnapshot() {
-  const snapshot = nodes.map(n => ({
-    id: n.id,
-    x: n.x,
-    y: n.y,
-    fx: n.fx,
-    fy: n.fy
-  }));
-  
-  positionHistory.push(snapshot);
-  
-  // Limit history size
-  if (positionHistory.length > MAX_UNDO_HISTORY) {
-    positionHistory.shift();
-  }
-  
-  updateUndoButton();
-}
-
-function undoPositions() {
-  if (positionHistory.length === 0) return;
-  
-  const snapshot = positionHistory.pop();
-  
-  snapshot.forEach(saved => {
-    const node = nodes.find(n => n.id === saved.id);
-    if (node) {
-      node.x = saved.x;
-      node.y = saved.y;
-      node.fx = saved.fx;
-      node.fy = saved.fy;
-    }
-  });
-  
-  renderGraph();
-  updateUndoButton();
-  showToast('Position restored', 'success');
-}
-
-function updateUndoButton() {
-  const btn = document.getElementById('undoBtn');
-  if (btn) {
-    btn.disabled = positionHistory.length === 0;
-  }
-}
-
-// ============================================================
-// LOCKED NODES
-// ============================================================
-function toggleNodeLock(nodeId) {
-  if (lockedNodes.has(nodeId)) {
-    lockedNodes.delete(nodeId);
-    showToast('Node unlocked', 'info');
-  } else {
-    lockedNodes.add(nodeId);
-    const node = nodes.find(n => n.id === nodeId);
-    if (node) {
-      node.fx = node.x;
-      node.fy = node.y;
-    }
-    showToast('Node locked', 'success');
-  }
-  renderGraph();
-}
-
-function lockAllVisibleNodes() {
-  nodes.forEach(n => {
-    if (isNodeVisible(n)) {
-      lockedNodes.add(n.id);
-      n.fx = n.x;
-      n.fy = n.y;
-    }
-  });
-  renderGraph();
-  showToast('All visible nodes locked', 'success');
-}
-
-function unlockAllNodes() {
-  lockedNodes.clear();
-  nodes.forEach(n => {
-    n.fx = null;
-    n.fy = null;
-  });
-  renderGraph();
-  showToast('All nodes unlocked', 'info');
-}
-
-// Refresh only unlocked nodes
-function refreshUnlockedNodes() {
-  savePositionSnapshot();
-  
-  nodes.forEach(n => {
-    if (!lockedNodes.has(n.id)) {
-      // Reset position for unlocked nodes only
-      n.x = null;
-      n.y = null;
-      n.fx = null;
-      n.fy = null;
-    }
-  });
-  
-  renderGraph();
-  showToast('Unlocked nodes refreshed', 'info');
-}
 
 // ============================================================
 // INITIALIZATION
 // ============================================================
 async function init() {
   showLoading(true);
-  
-  // Check admin status from localStorage
-  checkAdminStatus();
   
   // Test Supabase connection
   const connected = await testConnection();
@@ -1286,33 +1039,6 @@ async function loadAssemblyData(assemblyId) {
   setStatus('Loaded ' + nodes.length + ' nodes', 'success');
   setTimeout(() => setStatus(''), 2000);
   showLoading(false);
-}
-
-// Load data but preserve positions of locked nodes
-async function loadAssemblyDataPreservingLocked() {
-  // Save current positions of locked nodes
-  const savedPositions = new Map();
-  nodes.forEach(n => {
-    if (lockedNodes.has(n.id)) {
-      savedPositions.set(n.id, { x: n.x, y: n.y, fx: n.fx, fy: n.fy });
-    }
-  });
-  
-  // Reload data
-  await loadAssemblyData(currentAssemblyId);
-  
-  // Restore locked positions
-  nodes.forEach(n => {
-    if (savedPositions.has(n.id)) {
-      const pos = savedPositions.get(n.id);
-      n.x = pos.x;
-      n.y = pos.y;
-      n.fx = pos.fx;
-      n.fy = pos.fy;
-    }
-  });
-  
-  renderGraph();
 }
 
 function calculateLevels() {
@@ -1472,10 +1198,6 @@ function getAllDescendants(nodeId) {
 function calculateRadialPositions(parentNode, children, grandparentNode) {
   if (children.length === 0) return;
   
-  // Filter out locked children - they keep their position
-  const unlockedChildren = children.filter(c => !lockedNodes.has(c.id));
-  if (unlockedChildren.length === 0) return;
-  
   // Reference angle from parent to grandparent (0° default: right)
   let refAngle = 0;
   if (grandparentNode) {
@@ -1488,9 +1210,9 @@ function calculateRadialPositions(parentNode, children, grandparentNode) {
   const deadZoneHalf = RADIAL_DEAD_ZONE / 2;
   const startAngle = refAngle + deadZoneHalf + 180;
   const availableArc = 360 - RADIAL_DEAD_ZONE;
-  const angleStep = availableArc / Math.max(unlockedChildren.length, 1);
+  const angleStep = availableArc / Math.max(children.length, 1);
   
-  unlockedChildren.forEach((child, index) => {
+  children.forEach((child, index) => {
     const angle = startAngle + (index + 0.5) * angleStep;
     const radians = angle * (Math.PI / 180);
     const levelDiff = Math.abs((child.level || 1) - (parentNode.level || 1));
@@ -1508,13 +1230,10 @@ function applyRadialLayout(visibleNodes, nodeMap) {
   const sortedNodes = [...visibleNodes].sort((a, b) => (b.level || 0) - (a.level || 0));
   
   sortedNodes.forEach(node => {
-    // Skip locked parent nodes for radial layout
-    if (lockedNodes.has(node.id)) return;
-    
     if (node.level >= 3 && node.receivesFrom.length > 0) {
       const children = node.receivesFrom
         .map(id => nodeMap.get(id))
-        .filter(c => c && !processedChildren.has(c.id) && !lockedNodes.has(c.id));
+        .filter(c => c && !processedChildren.has(c.id));
       
       if (children.length === 0) return;
       
@@ -1769,20 +1488,13 @@ function renderGraph() {
   const margin = { left: 100 };
   
   visibleNodes.forEach(n => {
-    // Only initialize position for unlocked nodes without position
-    if (!lockedNodes.has(n.id) && (n.x === null || n.x === undefined)) {
+    if (n.x === null || n.x === undefined) {
       n.x = margin.left + (n.level - 1) * levelSpacing + Math.random() * 50;
       n.y = height / 2 + (Math.random() - 0.5) * 300;
     }
-    
-    // Keep locked nodes fixed
-    if (lockedNodes.has(n.id)) {
-      n.fx = n.x;
-      n.fy = n.y;
-    }
   });
   
-  // Apply radial layout if selected (only for unlocked nodes)
+  // Apply radial layout if selected
   if (currentLayoutMode === 'radial') {
     applyRadialLayout(visibleNodes, nodeMap);
   }
@@ -1973,18 +1685,6 @@ function renderGraph() {
       });
   });
   
-  // Lock indicator (admin only)
-  if (isAdmin) {
-    nodeElements.filter(d => lockedNodes.has(d.id)).each(function(d) {
-      d3.select(this).append('text')
-        .attr('class', 'lock-indicator')
-        .attr('x', d.width/2 - 8)
-        .attr('y', d.height/2 - 6)
-        .attr('text-anchor', 'middle')
-        .text('🔒');
-    });
-  }
-  
   // Tooltip
   nodeElements.append('title').text(d => {
     let t = d.name + `\nLevel: ${d.level}`;
@@ -2013,18 +1713,6 @@ function renderGraph() {
 // DRAG HANDLERS
 // ============================================================
 function dragStarted(e, d) {
-  // Non-admin cannot drag
-  if (!isAdmin) return;
-  
-  // Locked nodes can only be moved with Shift key
-  if (lockedNodes.has(d.id) && !shiftKeyPressed) {
-    showToast('Node is locked. Use Shift+Drag to move.', 'warning');
-    return;
-  }
-  
-  // Save position snapshot for undo
-  savePositionSnapshot();
-  
   if (!e.active) simulation.alphaTarget(0.1).restart();
   d.fx = d.x;
   d.fy = d.y;
@@ -2043,12 +1731,6 @@ function dragStarted(e, d) {
 }
 
 function dragged(e, d) {
-  // Non-admin cannot drag
-  if (!isAdmin) return;
-  
-  // Locked nodes can only be moved with Shift key
-  if (lockedNodes.has(d.id) && !shiftKeyPressed) return;
-  
   const dx = e.x - d.x;
   const dy = e.y - d.y;
   
@@ -2057,16 +1739,13 @@ function dragged(e, d) {
   d.x = e.x;
   d.y = e.y;
   
-  // If shift is held, move children too (including locked ones)
+  // If shift is held, move children too
   if (shiftKeyPressed && !d.is_orphan) {
     moveDescendants(d.id, dx, dy);
   }
 }
 
 function dragEnded(e, d) {
-  // Non-admin cannot drag
-  if (!isAdmin) return;
-  
   if (!e.active) simulation.alphaTarget(0);
   d.fx = d.x;
   d.fy = d.y;
@@ -2137,60 +1816,40 @@ function clearSelection() {
 // ============================================================
 function showNodeContextMenu(e, node) {
   const menu = document.getElementById('contextMenu');
-  const isLocked = lockedNodes.has(node.id);
   
-  let menuHtml = '';
+  let menuHtml = `
+    <div class="context-menu-item" onclick="addChildNode('${node.id}')">
+      <span class="context-menu-icon">➕</span> Add Child
+    </div>
+    <div class="context-menu-item" onclick="selectNode(nodes.find(n => n.id === '${node.id}')); hideContextMenu();">
+      <span class="context-menu-icon">✏️</span> Edit Node
+    </div>
+    <div class="context-menu-item" onclick="duplicateNode('${node.id}')">
+      <span class="context-menu-icon">📋</span> Duplicate
+    </div>
+  `;
   
-  // Admin-only options
-  if (isAdmin) {
-    menuHtml += `
-      <div class="context-menu-item" onclick="addChildNode('${node.id}')">
-        <span class="context-menu-icon">➕</span> Add Child
-      </div>
-      <div class="context-menu-item" onclick="selectNode(nodes.find(n => n.id === '${node.id}')); hideContextMenu();">
-        <span class="context-menu-icon">✏️</span> Edit Node
-      </div>
-      <div class="context-menu-item" onclick="duplicateNode('${node.id}')">
-        <span class="context-menu-icon">📋</span> Duplicate
-      </div>
-      <div class="context-menu-divider"></div>
-      <div class="context-menu-item" onclick="toggleNodeLock('${node.id}'); hideContextMenu();">
-        <span class="context-menu-icon">${isLocked ? '🔓' : '🔒'}</span> ${isLocked ? 'Unlock Position' : 'Lock Position'}
-      </div>
-    `;
-    
-    // Add orphan reconnection option
-    if (node.is_orphan) {
-      menuHtml += `
-        <div class="context-menu-divider"></div>
-        <div class="context-menu-item" onclick="showReconnectSubmenu('${node.id}')">
-          <span class="context-menu-icon">🔗</span> Connect to Parent...
-        </div>
-      `;
-    }
-    
+  // Add orphan reconnection option
+  if (node.is_orphan) {
     menuHtml += `
       <div class="context-menu-divider"></div>
-      <div class="context-menu-item danger" onclick="confirmDeleteNode('${node.id}')">
-        <span class="context-menu-icon">🗑️</span> Delete (Orphan Children)
-      </div>
-    `;
-  } else {
-    // View-only mode for non-admins
-    menuHtml = `
-      <div style="padding:10px 16px;font-size:12px;color:#666;">
-        <strong>${node.name}</strong><br>
-        Level: ${node.level}<br>
-        ${node.part_number ? `P/N: ${node.part_number}<br>` : ''}
-        ${node.status ? `Status: ${node.status}` : ''}
+      <div class="context-menu-item" onclick="showReconnectSubmenu('${node.id}')">
+        <span class="context-menu-icon">🔗</span> Connect to Parent...
       </div>
     `;
   }
-      </div>
+  
+  menuHtml += `
+    <div class="context-menu-divider"></div>
+    <div class="context-menu-item danger" onclick="confirmDeleteNode('${node.id}')">
+      <span class="context-menu-icon">🗑️</span> Delete (Orphan Children)
+    </div>
+  `;
+  
   menu.innerHTML = menuHtml;
   
   const x = Math.min(e.clientX, window.innerWidth - 220);
-  const y = Math.min(e.clientY, window.innerHeight - 300);
+  const y = Math.min(e.clientY, window.innerHeight - 250);
   menu.style.left = x + 'px';
   menu.style.top = y + 'px';
   menu.classList.add('show');
@@ -2419,14 +2078,11 @@ function closeSidePanel() {
 async function addChildNode(parentId) {
   hideContextMenu();
   
-  // Save current positions before making changes
-  savePositionSnapshot();
-  
   const parentNode = nodes.find(n => n.id === parentId);
   const newName = prompt('Enter name for new node:', 'New Node');
   if (!newName) return;
   
-  // Create node with position near parent
+  // Create node
   const { data: newNode, error: nodeError } = await db
     .from('logi_nodes')
     .insert({
@@ -2461,9 +2117,7 @@ async function addChildNode(parentId) {
   }
   
   showToast('Node created', 'success');
-  
-  // Reload but preserve locked node positions
-  await loadAssemblyDataPreservingLocked();
+  await loadAssemblyData(currentAssemblyId);
 }
 
 async function reconnectOrphan(orphanId, newParentId) {
@@ -2515,53 +2169,16 @@ function confirmDeleteNode(nodeId) {
 async function deleteNode(nodeId) {
   hideModal();
   
-  const node = nodes.find(n => n.id === nodeId);
-  if (!node) return;
+  const { error } = await db.rpc('delete_logi_node', { p_node_id: nodeId });
   
-  try {
-    // Soft delete the node
-    const { error: nodeError } = await db
-      .from('logi_nodes')
-      .update({ deleted: true, updated_at: new Date().toISOString() })
-      .eq('id', nodeId);
-    
-    if (nodeError) throw nodeError;
-    
-    // Soft delete links where this node is parent
-    await db
-      .from('logi_links')
-      .update({ deleted: true, updated_at: new Date().toISOString() })
-      .eq('parent_id', nodeId);
-    
-    // Soft delete links where this node is child
-    await db
-      .from('logi_links')
-      .update({ deleted: true, updated_at: new Date().toISOString() })
-      .eq('child_id', nodeId);
-    
-    // Mark children as orphans
-    for (const childId of node.receivesFrom) {
-      // Check if child has other non-deleted parents
-      const otherParents = links.filter(l => 
-        l.child_id === childId && 
-        l.parent_id !== nodeId && 
-        !l.deleted
-      );
-      
-      if (otherParents.length === 0) {
-        await db
-          .from('logi_nodes')
-          .update({ is_orphan: true, updated_at: new Date().toISOString() })
-          .eq('id', childId);
-      }
-    }
-    
-    showToast('Node deleted', 'success');
-    await loadAssemblyData(currentAssemblyId);
-  } catch (error) {
+  if (error) {
     showToast('Failed to delete node', 'error');
     console.error(error);
+    return;
   }
+  
+  showToast('Node deleted', 'success');
+  await loadAssemblyData(currentAssemblyId);
 }
 
 function confirmDeleteLink(linkId) {

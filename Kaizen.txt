@@ -1,8 +1,21 @@
-Now just for a update. PhaseFeaturesPriorityPhase 1Supabase setup, create tables, migrate sample data🔴 HighPhase 2Load data from Supabase, display tree (read-only)🔴 HighPhase 3Right-click menu, Add/Edit/Delete nodes🔴 HighPhase 4Edit panel for node properties + fastener on links🔴 HighPhase 5Radial layout with arrow-aware positioning🟡 MediumPhase 6Shift+Drag for group movement🟡 MediumPhase 7Orphan reconnection (drag or menu)🟡 MediumPhase 8Export (PNG/SVG), Position save/load🟢 Low
+1. Currently after pressing the 🔄 button all the blocks lose their position. Instead of that I want some way to lock the block position of the blocks. 🔄button shouldn't be able to unlock them. Only the blocks which are not fixed should have to get free with 🔄 button.
+
+The block positions which are locked should have to be altered only with "Shift+Drag" along with its children.
+
+2. Currently the delete node button is not working in the app as shown in the attached image. Also Whenever I add new child the block positions which I fix get disturbed after it.
+
+3. I want a undo button which can revert back my block positions if I disturb them by mistake.
+
+4. I want app admin mode where the tree will be only visible to the users with visible options like,
+a. Assembly dropdown
+b. Levels
+c. color
+d. Export options
+
+The more advanced options like Layout, 🔄, ➕, ➖, 💾 Save buttons should be visible to me only. Which will be accessible with my google account I provide. No should be able to login except my unique email address.
 
 
 
-phase 1-4 are complete. If yes can you apply the next phases to app? I dont know whether you will apply phase indivisually or at a time.
 
 
 XXXXXXXXXXXXXXXXXXXXXXX
@@ -14,7 +27,7 @@ XXXXXXXXXXXXXXXXXXXXXXX
 
 I can add Child with option "Add child" but I cant delete any block after right click.
 
-Whenever I add new  child the block positions which I fix get disturbed after it.
+
 
 To resolve it I want a option to lock the block position. Once locked that block will move only when its parent moved. The position of the child block and parent block should be fixed after locked.
 
