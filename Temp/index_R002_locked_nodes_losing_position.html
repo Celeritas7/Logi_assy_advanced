@@ -792,15 +792,6 @@
   <button class="header-btn admin-only" id="expandBtn" onclick="expandAll()">➕</button>
   <button class="header-btn admin-only" id="collapseBtn" onclick="collapseAll()">➖</button>
   <button class="header-btn undo-btn admin-only" id="undoBtn" onclick="undoPositions()" disabled>↩️ Undo</button>
-  
-  <div class="dropdown admin-only">
-    <button class="header-btn dropdown-btn" style="background:#9b59b6;" onclick="toggleLockDropdown()">🔒 Lock ▼</button>
-    <div class="dropdown-content" id="lockDropdown">
-      <a href="#" onclick="lockAllVisibleNodes(); closeLockDropdown(); return false;">🔒 Lock All Visible</a>
-      <a href="#" onclick="unlockAllNodes(); closeLockDropdown(); return false;">🔓 Unlock All</a>
-    </div>
-  </div>
-  
   <button class="header-btn save-btn admin-only" id="saveBtn" onclick="saveAllPositions()">💾 Save</button>
   
   <div class="dropdown">
@@ -1188,114 +1179,60 @@ function updateUndoButton() {
 // ============================================================
 // LOCKED NODES
 // ============================================================
-async function toggleNodeLock(nodeId) {
-  const isCurrentlyLocked = lockedNodes.has(nodeId);
-  const node = nodes.find(n => n.id === nodeId);
-  
-  if (!node) return;
-  
-  if (isCurrentlyLocked) {
-    // Unlock
+function toggleNodeLock(nodeId) {
+  if (lockedNodes.has(nodeId)) {
     lockedNodes.delete(nodeId);
-    node.fx = null;
-    node.fy = null;
-    node.is_locked = false;
-    
-    // Save to database
-    await db
-      .from('logi_nodes')
-      .update({ is_locked: false, updated_at: new Date().toISOString() })
-      .eq('id', nodeId);
-    
     showToast('Node unlocked', 'info');
   } else {
-    // Lock at current position
     lockedNodes.add(nodeId);
-    node.fx = node.x;
-    node.fy = node.y;
-    node.is_locked = true;
-    
-    // Save to database (position + locked status)
-    await db
-      .from('logi_nodes')
-      .update({ 
-        is_locked: true, 
-        x: Math.round(node.x), 
-        y: Math.round(node.y),
-        updated_at: new Date().toISOString() 
-      })
-      .eq('id', nodeId);
-    
-    showToast('Node locked at current position', 'success');
-  }
-  
-  renderGraph();
-}
-
-async function lockAllVisibleNodes() {
-  const visibleNodes = nodes.filter(n => isNodeVisible(n));
-  
-  for (const node of visibleNodes) {
-    if (!lockedNodes.has(node.id)) {
-      lockedNodes.add(node.id);
+    const node = nodes.find(n => n.id === nodeId);
+    if (node) {
       node.fx = node.x;
       node.fy = node.y;
-      node.is_locked = true;
-      
-      await db
-        .from('logi_nodes')
-        .update({ 
-          is_locked: true, 
-          x: Math.round(node.x), 
-          y: Math.round(node.y),
-          updated_at: new Date().toISOString() 
-        })
-        .eq('id', node.id);
     }
+    showToast('Node locked', 'success');
   }
-  
   renderGraph();
-  showToast(`${visibleNodes.length} nodes locked`, 'success');
 }
 
-async function unlockAllNodes() {
-  for (const node of nodes) {
-    if (lockedNodes.has(node.id)) {
-      node.fx = null;
-      node.fy = null;
-      node.is_locked = false;
+function lockAllVisibleNodes() {
+  nodes.forEach(n => {
+    if (isNodeVisible(n)) {
+      lockedNodes.add(n.id);
+      n.fx = n.x;
+      n.fy = n.y;
     }
-  }
-  
+  });
+  renderGraph();
+  showToast('All visible nodes locked', 'success');
+}
+
+function unlockAllNodes() {
   lockedNodes.clear();
-  
-  // Batch update all nodes
-  await db
-    .from('logi_nodes')
-    .update({ is_locked: false, updated_at: new Date().toISOString() })
-    .eq('assembly_id', currentAssemblyId);
-  
+  nodes.forEach(n => {
+    n.fx = null;
+    n.fy = null;
+  });
   renderGraph();
   showToast('All nodes unlocked', 'info');
 }
 
-// Refresh only unlocked nodes - resets their positions
+// Refresh only unlocked nodes
 function refreshUnlockedNodes() {
   savePositionSnapshot();
   
   nodes.forEach(n => {
     if (!lockedNodes.has(n.id)) {
-      // Reset position for unlocked nodes - force simulation will reposition them
+      // Reset position for unlocked nodes only
       n.x = null;
       n.y = null;
       n.fx = null;
       n.fy = null;
     }
-    // Locked nodes keep their fx/fy so they stay in place
   });
   
   renderGraph();
-  showToast('Unlocked nodes repositioned', 'info');
+  showToast('Unlocked nodes refreshed', 'info');
 }
 
 // ============================================================
@@ -1413,28 +1350,15 @@ async function loadAssemblyData(assemblyId) {
     return;
   }
   
-  // Clear and rebuild locked nodes set from database
-  lockedNodes.clear();
-  
   // Process data
-  nodes = nodesData.map(n => {
-    // Add to lockedNodes set if is_locked is true
-    if (n.is_locked) {
-      lockedNodes.add(n.id);
-    }
-    
-    return {
-      ...n,
-      goesInto: [],
-      receivesFrom: [],
-      level: -1,
-      width: calculateNodeWidth(n.name, n.part_number),
-      height: calculateNodeHeight(n.name, n.part_number),
-      // For locked nodes, set fx/fy immediately to prevent force simulation from moving them
-      fx: n.is_locked ? n.x : null,
-      fy: n.is_locked ? n.y : null
-    };
-  });
+  nodes = nodesData.map(n => ({
+    ...n,
+    goesInto: [],
+    receivesFrom: [],
+    level: -1,
+    width: calculateNodeWidth(n.name, n.part_number),
+    height: calculateNodeHeight(n.name, n.part_number)
+  }));
   
   links = linksData;
   
@@ -1461,8 +1385,7 @@ async function loadAssemblyData(assemblyId) {
   // Render
   renderGraph();
   
-  const lockedCount = lockedNodes.size;
-  setStatus(`Loaded ${nodes.length} nodes (${lockedCount} locked)`, 'success');
+  setStatus('Loaded ' + nodes.length + ' nodes', 'success');
   setTimeout(() => setStatus(''), 2000);
   showLoading(false);
 }
@@ -1627,20 +1550,6 @@ function getNodeColor(node) {
     return GROUP_COLORS[node.group_num % GROUP_COLORS.length];
   }
   return LEVEL_COLORS[Math.min(node.level - 1, 7)];
-}
-
-function toggleExportDropdown() {
-  document.getElementById('lockDropdown')?.classList.remove('show');
-  document.getElementById('exportDropdown').classList.toggle('show');
-}
-
-function toggleLockDropdown() {
-  document.getElementById('exportDropdown')?.classList.remove('show');
-  document.getElementById('lockDropdown').classList.toggle('show');
-}
-
-function closeLockDropdown() {
-  document.getElementById('lockDropdown')?.classList.remove('show');
 }
 
 function getAllDescendants(nodeId) {
@@ -2379,7 +2288,7 @@ function showNodeContextMenu(e, node) {
       </div>
     `;
   }
-      </div>
+
   menu.innerHTML = menuHtml;
   
   const x = Math.min(e.clientX, window.innerWidth - 220);
@@ -2858,28 +2767,21 @@ async function duplicateNode(nodeId) {
 async function saveAllPositions() {
   setStatus('Saving positions...', 'loading');
   
-  let savedCount = 0;
-  let lockedCount = 0;
+  const positions = nodes.map(n => ({
+    id: n.id,
+    x: Math.round(n.x),
+    y: Math.round(n.y)
+  }));
   
-  // Update positions and locked status for all nodes
-  for (const n of nodes) {
-    const isLocked = lockedNodes.has(n.id);
-    if (isLocked) lockedCount++;
-    
+  // Update positions in batches
+  for (const pos of positions) {
     await db
       .from('logi_nodes')
-      .update({ 
-        x: Math.round(n.x), 
-        y: Math.round(n.y), 
-        is_locked: isLocked,
-        updated_at: new Date().toISOString() 
-      })
-      .eq('id', n.id);
-    
-    savedCount++;
+      .update({ x: pos.x, y: pos.y, updated_at: new Date().toISOString() })
+      .eq('id', pos.id);
   }
   
-  showToast(`Saved ${savedCount} positions (${lockedCount} locked)`, 'success');
+  showToast('Positions saved', 'success');
   setStatus('');
 }
 
@@ -3073,10 +2975,10 @@ function setupEventListeners() {
   // Layout mode
   document.getElementById('layoutMode').addEventListener('change', (e) => {
     currentLayoutMode = e.target.value;
-    // Reset positions for radial layout to apply fresh positioning (only unlocked nodes)
+    // Reset positions for radial layout to apply fresh positioning
     if (currentLayoutMode === 'radial') {
       nodes.forEach(n => {
-        if (n.level >= 3 && !lockedNodes.has(n.id)) {
+        if (n.level >= 3) {
           n.x = null;
           n.y = null;
           n.fx = null;
