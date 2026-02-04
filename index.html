@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Logi Assembly Tree v16</title>
+  <title>Logi Assembly Tree v17</title>
   <script src="https://d3js.org/d3.v7.min.js"></script>
   <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
@@ -396,14 +396,23 @@
     }
 
     .collapse-indicator {
-      fill: white;
-      stroke: #666;
+      fill: #ffffff;
+      stroke: #333;
       stroke-width: 1.5px;
       cursor: pointer;
+      filter: drop-shadow(0 1px 2px rgba(0,0,0,0.2));
     }
 
     .collapse-indicator:hover {
-      fill: #f0f0f0;
+      fill: #e8e8e8;
+    }
+
+    .toggle-icon {
+      font-size: 10px;
+      font-weight: bold;
+      fill: #333;
+      pointer-events: none;
+      user-select: none;
     }
 
     .multi-parent-indicator {
@@ -746,13 +755,17 @@
 
 <!-- Header -->
 <div class="header">
-  <h1>⚙️ Logi Assembly v16</h1>
+  <h1>⚙️ Logi Assembly v17</h1>
   
   <div class="control-group">
     <label>Assembly:</label>
     <select id="assemblySelect">
       <option value="">Loading...</option>
     </select>
+    <button class="header-btn admin-only" style="padding:4px 8px;margin-left:4px;" onclick="createNewAssembly()" title="New Assembly">➕</button>
+    <button class="header-btn admin-only" style="padding:4px 8px;background:#f39c12;" onclick="renameAssembly()" title="Rename">✏️</button>
+    <button class="header-btn admin-only" style="padding:4px 8px;background:#9b59b6;" onclick="duplicateAssembly()" title="Duplicate">📋</button>
+    <button class="header-btn admin-only" style="padding:4px 8px;background:#e74c3c;" onclick="confirmDeleteAssembly()" title="Delete">🗑️</button>
   </div>
   
   <div class="control-group">
@@ -1378,6 +1391,255 @@ async function loadAssemblies() {
     currentAssemblyId = assemblies[0].id;
     currentAssemblyName = assemblies[0].name;
     await loadAssemblyData(currentAssemblyId);
+  }
+}
+
+// ============================================================
+// ASSEMBLY MANAGEMENT
+// ============================================================
+async function createNewAssembly() {
+  const name = prompt('Enter name for new assembly:');
+  if (!name || !name.trim()) return;
+  
+  const trimmedName = name.trim();
+  
+  try {
+    // Create the assembly
+    const { data: newAssembly, error: assemblyError } = await db
+      .from('logi_assemblies')
+      .insert({ name: trimmedName })
+      .select()
+      .single();
+    
+    if (assemblyError) throw assemblyError;
+    
+    // Create the root node with same name as assembly
+    const { error: nodeError } = await db
+      .from('logi_nodes')
+      .insert({
+        assembly_id: newAssembly.id,
+        name: trimmedName,
+        is_final: true,
+        status: 'NOT_STARTED',
+        x: 800,
+        y: 400
+      });
+    
+    if (nodeError) throw nodeError;
+    
+    showToast(`Assembly "${trimmedName}" created`, 'success');
+    
+    // Reload assemblies and select the new one
+    await loadAssemblies();
+    
+    // Select the new assembly
+    document.getElementById('assemblySelect').value = newAssembly.id;
+    currentAssemblyId = newAssembly.id;
+    currentAssemblyName = trimmedName;
+    await loadAssemblyData(newAssembly.id);
+    
+  } catch (error) {
+    showToast('Failed to create assembly', 'error');
+    console.error(error);
+  }
+}
+
+async function renameAssembly() {
+  if (!currentAssemblyId) {
+    showToast('No assembly selected', 'error');
+    return;
+  }
+  
+  const newName = prompt('Enter new name for assembly:', currentAssemblyName);
+  if (!newName || !newName.trim() || newName.trim() === currentAssemblyName) return;
+  
+  const trimmedName = newName.trim();
+  
+  try {
+    const { error } = await db
+      .from('logi_assemblies')
+      .update({ name: trimmedName, updated_at: new Date().toISOString() })
+      .eq('id', currentAssemblyId);
+    
+    if (error) throw error;
+    
+    currentAssemblyName = trimmedName;
+    
+    // Update dropdown
+    const option = document.querySelector(`#assemblySelect option[value="${currentAssemblyId}"]`);
+    if (option) option.textContent = trimmedName;
+    
+    // Update assemblies array
+    const assembly = assemblies.find(a => a.id === currentAssemblyId);
+    if (assembly) assembly.name = trimmedName;
+    
+    showToast(`Assembly renamed to "${trimmedName}"`, 'success');
+    
+  } catch (error) {
+    showToast('Failed to rename assembly', 'error');
+    console.error(error);
+  }
+}
+
+function confirmDeleteAssembly() {
+  if (!currentAssemblyId) {
+    showToast('No assembly selected', 'error');
+    return;
+  }
+  
+  if (assemblies.length <= 1) {
+    showToast('Cannot delete the last assembly', 'error');
+    return;
+  }
+  
+  showModal(
+    'Delete Assembly',
+    `Are you sure you want to delete "<strong>${currentAssemblyName}</strong>"?<br><br>
+    <span style="color:#e74c3c;">⚠️ This will permanently delete all nodes and links in this assembly!</span>`,
+    [
+      { label: 'Cancel', class: 'btn-secondary', action: hideModal },
+      { label: 'Delete', class: 'btn-danger', action: deleteAssembly }
+    ]
+  );
+}
+
+async function deleteAssembly() {
+  hideModal();
+  
+  try {
+    // Delete all links in this assembly
+    await db
+      .from('logi_links')
+      .delete()
+      .eq('assembly_id', currentAssemblyId);
+    
+    // Delete all nodes in this assembly
+    await db
+      .from('logi_nodes')
+      .delete()
+      .eq('assembly_id', currentAssemblyId);
+    
+    // Delete the assembly
+    const { error } = await db
+      .from('logi_assemblies')
+      .delete()
+      .eq('id', currentAssemblyId);
+    
+    if (error) throw error;
+    
+    showToast(`Assembly "${currentAssemblyName}" deleted`, 'success');
+    
+    // Reload assemblies
+    await loadAssemblies();
+    
+  } catch (error) {
+    showToast('Failed to delete assembly', 'error');
+    console.error(error);
+  }
+}
+
+async function duplicateAssembly() {
+  if (!currentAssemblyId) {
+    showToast('No assembly selected', 'error');
+    return;
+  }
+  
+  const newName = prompt('Enter name for duplicated assembly:', currentAssemblyName + ' (copy)');
+  if (!newName || !newName.trim()) return;
+  
+  const trimmedName = newName.trim();
+  
+  setStatus('Duplicating assembly...', 'loading');
+  
+  try {
+    // Create new assembly
+    const { data: newAssembly, error: assemblyError } = await db
+      .from('logi_assemblies')
+      .insert({ name: trimmedName })
+      .select()
+      .single();
+    
+    if (assemblyError) throw assemblyError;
+    
+    // Get all nodes from current assembly
+    const { data: oldNodes, error: nodesError } = await db
+      .from('logi_nodes')
+      .select('*')
+      .eq('assembly_id', currentAssemblyId)
+      .eq('deleted', false);
+    
+    if (nodesError) throw nodesError;
+    
+    // Create a map of old node IDs to new node IDs
+    const nodeIdMap = new Map();
+    
+    // Duplicate all nodes
+    for (const oldNode of oldNodes) {
+      const { data: newNode, error } = await db
+        .from('logi_nodes')
+        .insert({
+          assembly_id: newAssembly.id,
+          name: oldNode.name,
+          part_number: oldNode.part_number,
+          status: oldNode.status,
+          qty: oldNode.qty,
+          group_num: oldNode.group_num,
+          sequence_num: oldNode.sequence_num,
+          notes: oldNode.notes,
+          is_final: oldNode.is_final,
+          is_orphan: oldNode.is_orphan,
+          is_locked: oldNode.is_locked,
+          x: oldNode.x,
+          y: oldNode.y
+        })
+        .select()
+        .single();
+      
+      if (error) throw error;
+      nodeIdMap.set(oldNode.id, newNode.id);
+    }
+    
+    // Get all links from current assembly
+    const { data: oldLinks, error: linksError } = await db
+      .from('logi_links')
+      .select('*')
+      .eq('assembly_id', currentAssemblyId)
+      .eq('deleted', false);
+    
+    if (linksError) throw linksError;
+    
+    // Duplicate all links with new node IDs
+    for (const oldLink of oldLinks) {
+      const newChildId = nodeIdMap.get(oldLink.child_id);
+      const newParentId = nodeIdMap.get(oldLink.parent_id);
+      
+      if (newChildId && newParentId) {
+        await db
+          .from('logi_links')
+          .insert({
+            assembly_id: newAssembly.id,
+            child_id: newChildId,
+            parent_id: newParentId,
+            fastener: oldLink.fastener,
+            fastener_qty: oldLink.fastener_qty
+          });
+      }
+    }
+    
+    showToast(`Assembly duplicated as "${trimmedName}"`, 'success');
+    setStatus('');
+    
+    // Reload assemblies and select the new one
+    await loadAssemblies();
+    document.getElementById('assemblySelect').value = newAssembly.id;
+    currentAssemblyId = newAssembly.id;
+    currentAssemblyName = trimmedName;
+    await loadAssemblyData(newAssembly.id);
+    
+  } catch (error) {
+    showToast('Failed to duplicate assembly', 'error');
+    console.error(error);
+    setStatus('');
   }
 }
 
