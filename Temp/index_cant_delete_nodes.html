@@ -2379,7 +2379,7 @@ function showNodeContextMenu(e, node) {
       </div>
     `;
   }
-      </div>
+
   menu.innerHTML = menuHtml;
   
   const x = Math.min(e.clientX, window.innerWidth - 220);
@@ -2886,30 +2886,12 @@ async function saveAllPositions() {
 // ============================================================
 // MODAL
 // ============================================================
-let pendingModalAction = null; // Store the action to execute
-
 function showModal(title, body, buttons) {
   document.getElementById('modalTitle').textContent = title;
   document.getElementById('modalBody').innerHTML = body;
-  
-  // Create buttons with data-action attribute
-  document.getElementById('modalFooter').innerHTML = buttons.map((b, index) => 
-    `<button class="btn ${b.class}" data-action="${index}">${b.label}</button>`
+  document.getElementById('modalFooter').innerHTML = buttons.map(b => 
+    `<button class="btn ${b.class}" onclick="(${b.action.toString()})()">${b.label}</button>`
   ).join('');
-  
-  // Store actions and add click handlers
-  const footer = document.getElementById('modalFooter');
-  buttons.forEach((b, index) => {
-    const btn = footer.querySelector(`[data-action="${index}"]`);
-    if (btn) {
-      btn.addEventListener('click', () => {
-        if (typeof b.action === 'function') {
-          b.action();
-        }
-      });
-    }
-  });
-  
   document.getElementById('modalOverlay').classList.add('show');
 }
 
