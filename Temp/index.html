@@ -1,0 +1,3433 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Logi Assembly Tree v17</title>
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: #f0f4f8;
+      min-height: 100vh;
+      overflow: hidden;
+    }
+
+    /* Header */
+    .header {
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+      color: white;
+      padding: 10px 15px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+      flex-wrap: wrap;
+      position: relative;
+      z-index: 100;
+    }
+
+    .header h1 {
+      font-size: 16px;
+      font-weight: 600;
+      background: linear-gradient(90deg, #00d9ff, #00ff88);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .header select {
+      padding: 6px 12px;
+      font-size: 12px;
+      border: none;
+      border-radius: 6px;
+      background: white;
+      cursor: pointer;
+      min-width: 120px;
+    }
+
+    .header label {
+      font-size: 11px;
+      color: #8892b0;
+    }
+
+    .control-group {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      background: rgba(255,255,255,0.08);
+      padding: 4px 10px;
+      border-radius: 6px;
+    }
+
+    .header-btn {
+      padding: 6px 10px;
+      font-size: 11px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      background: #3498db;
+      color: white;
+      transition: all 0.2s;
+    }
+
+    .header-btn:hover {
+      background: #2980b9;
+      transform: translateY(-1px);
+    }
+
+    .header-btn.save-btn {
+      background: #27ae60;
+    }
+
+    .header-btn.save-btn:hover {
+      background: #1e8449;
+    }
+
+    .header-btn.undo-btn {
+      background: #f39c12;
+    }
+
+    .header-btn.undo-btn:hover {
+      background: #d68910;
+    }
+
+    .header-btn.undo-btn:disabled {
+      background: #7f8c8d;
+      cursor: not-allowed;
+      opacity: 0.5;
+    }
+
+    .admin-only {
+      display: none;
+    }
+
+    .admin-only.visible {
+      display: flex;
+    }
+
+    .admin-btn {
+      background: #9b59b6;
+    }
+
+    .admin-btn:hover {
+      background: #8e44ad;
+    }
+
+    .login-btn {
+      background: #e74c3c;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .login-btn:hover {
+      background: #c0392b;
+    }
+
+    .user-badge {
+      background: rgba(39, 174, 96, 0.3);
+      color: #27ae60;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 10px;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .status-text {
+      font-size: 11px;
+      padding: 4px 8px;
+      border-radius: 4px;
+    }
+
+    .status-text.loading { color: #f39c12; }
+    .status-text.error { color: #e74c3c; }
+    .status-text.success { color: #27ae60; }
+
+    .db-indicator {
+      background: rgba(39, 174, 96, 0.2);
+      color: #27ae60;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 10px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .db-indicator.disconnected {
+      background: rgba(231, 76, 60, 0.2);
+      color: #e74c3c;
+    }
+
+    .db-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #27ae60;
+      animation: pulse 2s infinite;
+    }
+
+    .db-indicator.disconnected .db-dot {
+      background: #e74c3c;
+      animation: none;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
+    /* Dropdown */
+    .dropdown {
+      position: relative;
+      display: inline-block;
+    }
+
+    .dropdown-btn {
+      background: #16a085;
+    }
+
+    .dropdown-btn:hover {
+      background: #138d75;
+    }
+
+    .dropdown-content {
+      display: none;
+      position: absolute;
+      top: 100%;
+      left: 0;
+      background: white;
+      min-width: 160px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+      border-radius: 6px;
+      z-index: 1000;
+      overflow: hidden;
+      margin-top: 4px;
+    }
+
+    .dropdown-content.show {
+      display: block;
+    }
+
+    .dropdown-content a {
+      color: #333;
+      padding: 10px 16px;
+      text-decoration: none;
+      display: block;
+      font-size: 12px;
+      transition: background 0.2s;
+    }
+
+    .dropdown-content a:hover {
+      background: #f0f0f0;
+    }
+
+    /* Legend */
+    .legend {
+      background: white;
+      padding: 8px 15px;
+      display: flex;
+      gap: 15px;
+      align-items: center;
+      border-bottom: 1px solid #e0e0e0;
+      flex-wrap: wrap;
+      font-size: 10px;
+    }
+
+    .legend-section {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .legend-title {
+      font-weight: 600;
+      color: #333;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      color: #666;
+    }
+
+    .legend-color {
+      width: 14px;
+      height: 14px;
+      border-radius: 3px;
+      border: 1px solid rgba(0,0,0,0.1);
+    }
+
+    .legend-divider {
+      width: 1px;
+      height: 20px;
+      background: #ddd;
+    }
+
+    /* Main container */
+    .main-container {
+      display: flex;
+      height: calc(100vh - 90px);
+    }
+
+    .tree-container {
+      flex: 1;
+      overflow: auto;
+      background: #fafafa;
+      position: relative;
+    }
+
+    svg {
+      display: block;
+    }
+
+    /* Nodes */
+    .node {
+      cursor: grab;
+    }
+
+    .node:active {
+      cursor: grabbing;
+    }
+
+    .node.selected .node-shape {
+      filter: drop-shadow(0 0 8px rgba(52, 152, 219, 0.8));
+    }
+
+    .node.locked .node-shape {
+      stroke-width: 3px !important;
+    }
+
+    .node.locked::after {
+      content: '🔒';
+    }
+
+    .lock-indicator {
+      font-size: 8px;
+      pointer-events: none;
+    }
+
+    .node.drop-target .node-shape {
+      filter: drop-shadow(0 0 12px rgba(39, 174, 96, 0.9)) !important;
+    }
+
+    .node.child-highlight .node-shape {
+      filter: drop-shadow(0 0 6px rgba(155, 89, 182, 0.7));
+    }
+
+    .node.dragging-children .node-shape {
+      filter: drop-shadow(0 0 10px rgba(155, 89, 182, 0.9));
+    }
+
+    .node-shape {
+      transition: filter 0.2s;
+    }
+
+    .node:hover .node-shape {
+      filter: brightness(0.95);
+    }
+
+    .node-label {
+      pointer-events: none;
+      font-weight: 500;
+    }
+
+    .node-pn {
+      pointer-events: none;
+      fill: #666;
+      font-style: italic;
+    }
+
+    .sequence-badge {
+      font-size: 11px;
+      font-weight: bold;
+      fill: #e74c3c;
+      pointer-events: none;
+    }
+
+    .toggle-icon {
+      font-weight: bold;
+      font-size: 10px;
+      fill: #333;
+      pointer-events: none;
+    }
+
+    .link {
+      fill: none !important;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      cursor: pointer;
+    }
+
+    .link:hover {
+      stroke-width: 3px !important;
+    }
+
+    .link.selected {
+      stroke-width: 3px !important;
+      filter: drop-shadow(0 0 4px rgba(52, 152, 219, 0.8));
+    }
+
+    .link-label {
+      font-size: 8px;
+      pointer-events: none;
+      font-weight: 600;
+    }
+
+    .link-label-bg {
+      fill: white;
+      opacity: 0.95;
+    }
+
+    .status-indicator {
+      stroke-width: 2px;
+    }
+
+    .collapse-indicator {
+      fill: #ffffff;
+      stroke: #333;
+      stroke-width: 1.5px;
+      cursor: pointer;
+      filter: drop-shadow(0 1px 2px rgba(0,0,0,0.2));
+    }
+
+    .collapse-indicator:hover {
+      fill: #e8e8e8;
+    }
+
+    .toggle-icon {
+      font-size: 10px;
+      font-weight: bold;
+      fill: #333;
+      pointer-events: none;
+      user-select: none;
+    }
+
+    .multi-parent-indicator {
+      fill: none;
+      stroke-width: 2px;
+    }
+
+    /* Context Menu */
+    .context-menu {
+      display: none;
+      position: fixed;
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+      min-width: 180px;
+      z-index: 1000;
+      overflow: hidden;
+      animation: menuFadeIn 0.15s ease;
+    }
+
+    @keyframes menuFadeIn {
+      from { opacity: 0; transform: scale(0.95); }
+      to { opacity: 1; transform: scale(1); }
+    }
+
+    .context-menu.show {
+      display: block;
+    }
+
+    .context-menu-item {
+      padding: 10px 16px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 13px;
+      color: #333;
+      transition: background 0.15s;
+    }
+
+    .context-menu-item:hover {
+      background: #f5f5f5;
+    }
+
+    .context-menu-item.danger {
+      color: #e74c3c;
+    }
+
+    .context-menu-item.danger:hover {
+      background: #fef0f0;
+    }
+
+    .context-menu-divider {
+      height: 1px;
+      background: #eee;
+      margin: 4px 0;
+    }
+
+    .context-menu-icon {
+      font-size: 14px;
+      width: 20px;
+      text-align: center;
+    }
+
+    /* Side Panel */
+    .side-panel {
+      width: 0;
+      background: white;
+      border-left: 1px solid #e0e0e0;
+      overflow: hidden;
+      transition: width 0.3s ease;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .side-panel.open {
+      width: 320px;
+    }
+
+    .side-panel-header {
+      padding: 15px;
+      background: #f8f9fa;
+      border-bottom: 1px solid #e0e0e0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .side-panel-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: #333;
+    }
+
+    .side-panel-close {
+      background: none;
+      border: none;
+      font-size: 18px;
+      cursor: pointer;
+      color: #666;
+      padding: 4px 8px;
+      border-radius: 4px;
+    }
+
+    .side-panel-close:hover {
+      background: #eee;
+    }
+
+    .side-panel-content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 15px;
+    }
+
+    .form-group {
+      margin-bottom: 15px;
+    }
+
+    .form-label {
+      display: block;
+      font-size: 11px;
+      font-weight: 600;
+      color: #666;
+      margin-bottom: 5px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .form-input, .form-select, .form-textarea {
+      width: 100%;
+      padding: 10px 12px;
+      font-size: 13px;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    .form-input:focus, .form-select:focus, .form-textarea:focus {
+      outline: none;
+      border-color: #3498db;
+      box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.15);
+    }
+
+    .form-textarea {
+      min-height: 80px;
+      resize: vertical;
+    }
+
+    .form-row {
+      display: flex;
+      gap: 10px;
+    }
+
+    .form-row .form-group {
+      flex: 1;
+    }
+
+    .side-panel-footer {
+      padding: 15px;
+      border-top: 1px solid #e0e0e0;
+      display: flex;
+      gap: 10px;
+    }
+
+    .btn {
+      padding: 10px 20px;
+      font-size: 13px;
+      font-weight: 500;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .btn-primary {
+      background: #3498db;
+      color: white;
+    }
+
+    .btn-primary:hover {
+      background: #2980b9;
+    }
+
+    .btn-secondary {
+      background: #ecf0f1;
+      color: #333;
+    }
+
+    .btn-secondary:hover {
+      background: #ddd;
+    }
+
+    .btn-danger {
+      background: #e74c3c;
+      color: white;
+    }
+
+    .btn-danger:hover {
+      background: #c0392b;
+    }
+
+    .btn-block {
+      width: 100%;
+    }
+
+    /* Toast notifications */
+    .toast-container {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      z-index: 2000;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .toast {
+      padding: 12px 20px;
+      background: #333;
+      color: white;
+      border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      animation: toastIn 0.3s ease;
+      max-width: 350px;
+    }
+
+    .toast.success { background: #27ae60; }
+    .toast.error { background: #e74c3c; }
+    .toast.warning { background: #f39c12; }
+
+    @keyframes toastIn {
+      from { opacity: 0; transform: translateX(100px); }
+      to { opacity: 1; transform: translateX(0); }
+    }
+
+    /* Modal */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0,0,0,0.5);
+      z-index: 1500;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .modal-overlay.show {
+      display: flex;
+    }
+
+    .modal {
+      background: white;
+      border-radius: 12px;
+      width: 90%;
+      max-width: 450px;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+      animation: modalIn 0.2s ease;
+    }
+
+    @keyframes modalIn {
+      from { opacity: 0; transform: scale(0.9); }
+      to { opacity: 1; transform: scale(1); }
+    }
+
+    .modal-header {
+      padding: 20px;
+      border-bottom: 1px solid #eee;
+    }
+
+    .modal-title {
+      font-size: 18px;
+      font-weight: 600;
+      color: #333;
+    }
+
+    .modal-body {
+      padding: 20px;
+    }
+
+    .modal-footer {
+      padding: 15px 20px;
+      border-top: 1px solid #eee;
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+    }
+
+    /* Loading overlay */
+    .loading-overlay {
+      display: none;
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(255,255,255,0.8);
+      z-index: 500;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .loading-overlay.show {
+      display: flex;
+    }
+
+    .spinner {
+      width: 40px;
+      height: 40px;
+      border: 3px solid #eee;
+      border-top-color: #3498db;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      .side-panel.open {
+        position: fixed;
+        right: 0;
+        top: 0;
+        bottom: 0;
+        width: 100%;
+        max-width: 320px;
+        z-index: 200;
+      }
+    }
+  </style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="header">
+  <h1>⚙️ Logi Assembly v17</h1>
+  
+  <div class="control-group">
+    <label>Assembly:</label>
+    <select id="assemblySelect">
+      <option value="">Loading...</option>
+    </select>
+    <button class="header-btn admin-only" style="padding:4px 8px;margin-left:4px;" onclick="createNewAssembly()" title="New Assembly">➕</button>
+    <button class="header-btn admin-only" style="padding:4px 8px;background:#f39c12;" onclick="renameAssembly()" title="Rename">✏️</button>
+    <button class="header-btn admin-only" style="padding:4px 8px;background:#9b59b6;" onclick="duplicateAssembly()" title="Duplicate">📋</button>
+    <button class="header-btn admin-only" style="padding:4px 8px;background:#e74c3c;" onclick="confirmDeleteAssembly()" title="Delete">🗑️</button>
+  </div>
+  
+  <div class="control-group">
+    <label>Level:</label>
+    <select id="levelFilter">
+      <option value="all">All</option>
+      <option value="1">≤L1</option>
+      <option value="2">≤L2</option>
+      <option value="3">≤L3</option>
+      <option value="4">≤L4</option>
+      <option value="5">≤L5</option>
+      <option value="6">≤L6</option>
+      <option value="7">≤L7</option>
+      <option value="8">≤L8</option>
+    </select>
+  </div>
+  
+  <div class="control-group">
+    <label>Color:</label>
+    <select id="colorMode">
+      <option value="level">Level</option>
+      <option value="group">Group</option>
+      <option value="status">Status</option>
+    </select>
+  </div>
+  
+  <!-- Admin-only controls -->
+  <div class="control-group admin-only" id="layoutControl">
+    <label>Layout:</label>
+    <select id="layoutMode">
+      <option value="force">Force</option>
+      <option value="radial">Radial (L3+)</option>
+    </select>
+  </div>
+  
+  <button class="header-btn admin-only" id="refreshBtn" onclick="refreshUnlockedNodes()">🔄</button>
+  <button class="header-btn admin-only" id="expandBtn" onclick="expandAll()">➕</button>
+  <button class="header-btn admin-only" id="collapseBtn" onclick="collapseAll()">➖</button>
+  <button class="header-btn undo-btn admin-only" id="undoBtn" onclick="undoPositions()" disabled>↩️ Undo</button>
+  
+  <div class="dropdown admin-only">
+    <button class="header-btn dropdown-btn" style="background:#9b59b6;" onclick="toggleLockDropdown()">🔒 Lock ▼</button>
+    <div class="dropdown-content" id="lockDropdown">
+      <a href="#" onclick="lockAllVisibleNodes(); closeLockDropdown(); return false;">🔒 Lock All Visible</a>
+      <a href="#" onclick="unlockAllNodes(); closeLockDropdown(); return false;">🔓 Unlock All</a>
+    </div>
+  </div>
+  
+  <button class="header-btn save-btn admin-only" id="saveBtn" onclick="saveAllPositions()">💾 Save</button>
+  
+  <div class="dropdown">
+    <button class="header-btn dropdown-btn" onclick="toggleExportDropdown()">📤 Export ▼</button>
+    <div class="dropdown-content" id="exportDropdown">
+      <a href="#" onclick="downloadPNG(); return false;">📷 Download PNG</a>
+      <a href="#" onclick="downloadSVG(); return false;">📐 Download SVG</a>
+    </div>
+  </div>
+  
+  <span id="statusIndicator" class="status-text"></span>
+  
+  <div id="dbIndicator" class="db-indicator">
+    <span class="db-dot"></span>
+    <span>Supabase</span>
+  </div>
+  
+  <!-- Login/User area -->
+  <div id="loginArea">
+    <button class="header-btn login-btn" id="loginBtn" onclick="handleLogin()">
+      <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" style="width:14px;height:14px;"> Sign In
+    </button>
+  </div>
+  <div id="userBadge" class="user-badge" style="display:none;">
+    <span id="userName"></span>
+    <button class="header-btn" style="padding:2px 6px;font-size:9px;" onclick="handleLogout()">✕</button>
+  </div>
+</div>
+
+<!-- Legend -->
+<div class="legend">
+  <div class="legend-section">
+    <span class="legend-title">Levels:</span>
+    <div class="legend-item"><div class="legend-color" style="background:#e8e8e8;"></div>L1</div>
+    <div class="legend-item"><div class="legend-color" style="background:#ffcdd2;"></div>L2</div>
+    <div class="legend-item"><div class="legend-color" style="background:#ffe0b2;"></div>L3</div>
+    <div class="legend-item"><div class="legend-color" style="background:#fff9c4;"></div>L4</div>
+    <div class="legend-item"><div class="legend-color" style="background:#c8e6c9;"></div>L5</div>
+    <div class="legend-item"><div class="legend-color" style="background:#b3e5fc;"></div>L6</div>
+    <div class="legend-item"><div class="legend-color" style="background:#e1bee7;"></div>L7</div>
+    <div class="legend-item"><div class="legend-color" style="background:#a5d6a7;"></div>L8</div>
+  </div>
+  
+  <div class="legend-divider"></div>
+  
+  <div class="legend-section">
+    <span class="legend-title">Status:</span>
+    <div class="legend-item"><div class="legend-color" style="background:#27ae60;"></div>Done</div>
+    <div class="legend-item"><div class="legend-color" style="background:#f1c40f;"></div>WIP</div>
+    <div class="legend-item"><div class="legend-color" style="background:#e74c3c;"></div>Blocked</div>
+    <div class="legend-item"><div class="legend-color" style="background:#9b59b6; border-style:dashed;"></div>Orphan</div>
+  </div>
+  
+  <div class="legend-divider"></div>
+  
+  <div class="legend-section admin-only" id="legendTips">
+    <span style="color:#666; font-size:9px;">💡 Shift+Drag = move with children | Drag orphan = reconnect | 🔒 = locked position</span>
+  </div>
+</div>
+
+<!-- Main Container -->
+<div class="main-container">
+  <div class="tree-container" id="treeContainer">
+    <svg id="treeSvg"></svg>
+    <div class="loading-overlay" id="loadingOverlay">
+      <div class="spinner"></div>
+    </div>
+  </div>
+  
+  <!-- Side Panel for editing -->
+  <div class="side-panel" id="sidePanel">
+    <div class="side-panel-header">
+      <span class="side-panel-title" id="panelTitle">Edit Node</span>
+      <button class="side-panel-close" onclick="closeSidePanel()">×</button>
+    </div>
+    <div class="side-panel-content" id="panelContent">
+      <!-- Dynamic content -->
+    </div>
+    <div class="side-panel-footer" id="panelFooter">
+      <!-- Dynamic buttons -->
+    </div>
+  </div>
+</div>
+
+<!-- Context Menu -->
+<div class="context-menu" id="contextMenu">
+  <!-- Dynamic content -->
+</div>
+
+<!-- Modal for confirmations -->
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title" id="modalTitle">Confirm</div>
+    </div>
+    <div class="modal-body" id="modalBody">
+      <!-- Dynamic content -->
+    </div>
+    <div class="modal-footer" id="modalFooter">
+      <!-- Dynamic buttons -->
+    </div>
+  </div>
+</div>
+
+<!-- Toast container -->
+<div class="toast-container" id="toastContainer"></div>
+
+<script>
+// ============================================================
+// SUPABASE CONFIGURATION
+// ============================================================
+const SUPABASE_URL = 'https://wylxvmkcrexwfpjpbhyy.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind5bHh2bWtjcmV4d2ZwanBiaHl5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg2MzkxMDYsImV4cCI6MjA4NDIxNTEwNn0.6Bxo42hx4jwlJGWnfjiTpiDUsYfc1QLTN3YtrU1efak';
+
+// Create Supabase client (using 'db' to avoid conflict with library's global 'supabase')
+const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// ============================================================
+// CONSTANTS
+// ============================================================
+const LEVEL_COLORS = [
+  "#e8e8e8", "#ffcdd2", "#ffe0b2", "#fff9c4",
+  "#c8e6c9", "#b3e5fc", "#e1bee7", "#a5d6a7"
+];
+
+const GROUP_COLORS = [
+  "#78909c", "#42a5f5", "#ff7043", "#ec407a",
+  "#ab47bc", "#26a69a", "#d4e157", "#ffa726"
+];
+
+const STATUS_COLORS = {
+  'DONE': { fill: "#27ae60", stroke: "#1e8449", bg: "#d5f5e3" },
+  'IN_PROGRESS': { fill: "#f1c40f", stroke: "#d4ac0d", bg: "#fef9e7" },
+  'NOT_STARTED': { fill: "#bdc3c7", stroke: "#95a5a6", bg: "#f4f6f6" },
+  'BLOCKED': { fill: "#e74c3c", stroke: "#c0392b", bg: "#fdedec" },
+  'ON_HOLD': { fill: "#e67e22", stroke: "#d35400", bg: "#fdebd0" },
+  'REVIEW': { fill: "#3498db", stroke: "#2980b9", bg: "#ebf5fb" }
+};
+
+const LEVEL_SHAPES = [
+  "rectangle", "rounded_rectangle", "pentagon", "stadium",
+  "parallelogram", "hexagon", "ellipse", "octagon"
+];
+
+const SEQUENCE_BADGES = ['⓪','①','②','③','④','⑤','⑥','⑦','⑧','⑨','⑩','⑪','⑫','⑬','⑭','⑮','⑯','⑰','⑱','⑲','⑳'];
+
+const FASTENER_COLORS = {
+  CBE: "#3498db", CBST: "#9b59b6", M: "#27ae60", MS: "#e67e22",
+  PRESS: "#e74c3c", ORIGINAL: "#7f8c8d", OTHER: "#2c3e50"
+};
+
+const NODE_WIDTH_BASE = 120;
+const NODE_WIDTH_MAX = 160;
+
+// ============================================================
+// ADMIN CONFIGURATION
+// ============================================================
+const ADMIN_EMAIL = 'mangaonkaraniket@gmail.com'; // Your email here
+const GOOGLE_CLIENT_ID = '960816882472-b3qjf15ehvab7mcuvf8154tveoub4sic.apps.googleusercontent.com';
+
+// ============================================================
+// GLOBAL STATE
+// ============================================================
+let assemblies = [];
+let currentAssemblyId = null;
+let currentAssemblyName = '';
+let nodes = [];
+let links = [];
+let simulation = null;
+let collapsedNodes = new Set();
+let selectedNode = null;
+let selectedLink = null;
+let currentColorMode = 'level';
+let currentLevelFilter = 'all';
+let currentLayoutMode = 'force';
+let shiftKeyPressed = false;
+let draggingOrphan = null;
+let dropTarget = null;
+
+// Admin and position control
+let isAdmin = false;
+let lockedNodes = new Set(); // Nodes with locked positions
+let positionHistory = []; // For undo functionality
+const MAX_UNDO_HISTORY = 20;
+
+const RADIAL_RADIUS = 120;
+const RADIAL_DEAD_ZONE = 60;
+
+// ============================================================
+// ADMIN / LOGIN FUNCTIONS (Google Sign-In)
+// ============================================================
+let googleUser = null;
+
+function initGoogleSignIn() {
+  if (typeof google === 'undefined' || !google.accounts) {
+    console.log('Google Sign-In not loaded yet, retrying...');
+    setTimeout(initGoogleSignIn, 500);
+    return;
+  }
+  
+  google.accounts.id.initialize({
+    client_id: GOOGLE_CLIENT_ID,
+    callback: handleGoogleCallback,
+    auto_select: true, // Auto sign-in if previously logged in
+  });
+  
+  // Check if user was previously logged in
+  const savedEmail = localStorage.getItem('logi_admin_email');
+  if (savedEmail === ADMIN_EMAIL) {
+    // Try to auto-login
+    google.accounts.id.prompt();
+  }
+}
+
+function handleGoogleCallback(response) {
+  // Decode the JWT token to get user info
+  const payload = decodeJwtPayload(response.credential);
+  
+  if (payload && payload.email) {
+    googleUser = payload;
+    
+    if (payload.email.toLowerCase() === ADMIN_EMAIL.toLowerCase()) {
+      isAdmin = true;
+      localStorage.setItem('logi_admin_email', payload.email);
+      showAdminUI(payload);
+      showToast(`Welcome, ${payload.name || 'Admin'}!`, 'success');
+    } else {
+      isAdmin = false;
+      showToast('Logged in as guest (view only)', 'info');
+      showGuestUI(payload);
+    }
+  }
+}
+
+function decodeJwtPayload(token) {
+  try {
+    const base64Url = token.split('.')[1];
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
+      return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+    }).join(''));
+    return JSON.parse(jsonPayload);
+  } catch (e) {
+    console.error('Failed to decode JWT:', e);
+    return null;
+  }
+}
+
+function checkAdminStatus() {
+  // Initialize Google Sign-In
+  initGoogleSignIn();
+}
+
+function handleLogin() {
+  if (typeof google === 'undefined' || !google.accounts) {
+    showToast('Google Sign-In not loaded. Please refresh.', 'error');
+    return;
+  }
+  
+  // Show Google Sign-In prompt
+  google.accounts.id.prompt((notification) => {
+    if (notification.isNotDisplayed()) {
+      // Fallback: render button if prompt doesn't show
+      showGoogleButtonFallback();
+    }
+  });
+}
+
+function showGoogleButtonFallback() {
+  // Create a modal with Google Sign-In button
+  showModal(
+    'Sign In',
+    '<div id="googleButtonContainer" style="display:flex;justify-content:center;padding:20px;"></div>',
+    [{ label: 'Cancel', class: 'btn-secondary', action: hideModal }]
+  );
+  
+  // Render Google button in the container
+  setTimeout(() => {
+    const container = document.getElementById('googleButtonContainer');
+    if (container && google.accounts.id) {
+      google.accounts.id.renderButton(container, {
+        theme: 'outline',
+        size: 'large',
+        text: 'signin_with',
+        shape: 'rectangular'
+      });
+    }
+  }, 100);
+}
+
+function handleLogout() {
+  isAdmin = false;
+  googleUser = null;
+  localStorage.removeItem('logi_admin_email');
+  
+  // Revoke Google session
+  if (typeof google !== 'undefined' && google.accounts) {
+    google.accounts.id.disableAutoSelect();
+  }
+  
+  hideAdminUI();
+  showToast('Logged out', 'info');
+}
+
+function showAdminUI(user) {
+  document.querySelectorAll('.admin-only').forEach(el => el.classList.add('visible'));
+  document.getElementById('loginBtn').style.display = 'none';
+  document.getElementById('userBadge').style.display = 'flex';
+  
+  // Show user name or email
+  const displayName = user.name || user.email.split('@')[0];
+  document.getElementById('userName').textContent = `👤 ${displayName}`;
+  document.getElementById('userName').title = user.email;
+}
+
+function showGuestUI(user) {
+  document.querySelectorAll('.admin-only').forEach(el => el.classList.remove('visible'));
+  document.getElementById('loginBtn').style.display = 'none';
+  document.getElementById('userBadge').style.display = 'flex';
+  document.getElementById('userBadge').style.background = 'rgba(52, 152, 219, 0.2)';
+  document.getElementById('userBadge').style.color = '#3498db';
+  
+  const displayName = user.name || user.email.split('@')[0];
+  document.getElementById('userName').textContent = `👁 ${displayName}`;
+  document.getElementById('userName').title = `${user.email} (Guest)`;
+}
+
+function hideAdminUI() {
+  document.querySelectorAll('.admin-only').forEach(el => el.classList.remove('visible'));
+  document.getElementById('loginBtn').style.display = 'flex';
+  document.getElementById('userBadge').style.display = 'none';
+  document.getElementById('userBadge').style.background = '';
+  document.getElementById('userBadge').style.color = '';
+}
+
+// ============================================================
+// POSITION HISTORY (UNDO)
+// ============================================================
+function savePositionSnapshot() {
+  const snapshot = nodes.map(n => ({
+    id: n.id,
+    x: n.x,
+    y: n.y,
+    fx: n.fx,
+    fy: n.fy
+  }));
+  
+  positionHistory.push(snapshot);
+  
+  // Limit history size
+  if (positionHistory.length > MAX_UNDO_HISTORY) {
+    positionHistory.shift();
+  }
+  
+  updateUndoButton();
+}
+
+function undoPositions() {
+  if (positionHistory.length === 0) return;
+  
+  const snapshot = positionHistory.pop();
+  
+  snapshot.forEach(saved => {
+    const node = nodes.find(n => n.id === saved.id);
+    if (node) {
+      node.x = saved.x;
+      node.y = saved.y;
+      node.fx = saved.fx;
+      node.fy = saved.fy;
+    }
+  });
+  
+  renderGraph();
+  updateUndoButton();
+  showToast('Position restored', 'success');
+}
+
+function updateUndoButton() {
+  const btn = document.getElementById('undoBtn');
+  if (btn) {
+    btn.disabled = positionHistory.length === 0;
+  }
+}
+
+// ============================================================
+// LOCKED NODES
+// ============================================================
+async function toggleNodeLock(nodeId) {
+  const isCurrentlyLocked = lockedNodes.has(nodeId);
+  const node = nodes.find(n => n.id === nodeId);
+  
+  if (!node) return;
+  
+  if (isCurrentlyLocked) {
+    // Unlock
+    lockedNodes.delete(nodeId);
+    node.fx = null;
+    node.fy = null;
+    node.is_locked = false;
+    
+    // Save to database
+    await db
+      .from('logi_nodes')
+      .update({ is_locked: false, updated_at: new Date().toISOString() })
+      .eq('id', nodeId);
+    
+    showToast('Node unlocked', 'info');
+  } else {
+    // Lock at current position
+    lockedNodes.add(nodeId);
+    node.fx = node.x;
+    node.fy = node.y;
+    node.is_locked = true;
+    
+    // Save to database (position + locked status)
+    await db
+      .from('logi_nodes')
+      .update({ 
+        is_locked: true, 
+        x: Math.round(node.x), 
+        y: Math.round(node.y),
+        updated_at: new Date().toISOString() 
+      })
+      .eq('id', nodeId);
+    
+    showToast('Node locked at current position', 'success');
+  }
+  
+  renderGraph();
+}
+
+async function lockAllVisibleNodes() {
+  const visibleNodes = nodes.filter(n => isNodeVisible(n));
+  
+  for (const node of visibleNodes) {
+    if (!lockedNodes.has(node.id)) {
+      lockedNodes.add(node.id);
+      node.fx = node.x;
+      node.fy = node.y;
+      node.is_locked = true;
+      
+      await db
+        .from('logi_nodes')
+        .update({ 
+          is_locked: true, 
+          x: Math.round(node.x), 
+          y: Math.round(node.y),
+          updated_at: new Date().toISOString() 
+        })
+        .eq('id', node.id);
+    }
+  }
+  
+  renderGraph();
+  showToast(`${visibleNodes.length} nodes locked`, 'success');
+}
+
+async function unlockAllNodes() {
+  for (const node of nodes) {
+    if (lockedNodes.has(node.id)) {
+      node.fx = null;
+      node.fy = null;
+      node.is_locked = false;
+    }
+  }
+  
+  lockedNodes.clear();
+  
+  // Batch update all nodes
+  await db
+    .from('logi_nodes')
+    .update({ is_locked: false, updated_at: new Date().toISOString() })
+    .eq('assembly_id', currentAssemblyId);
+  
+  renderGraph();
+  showToast('All nodes unlocked', 'info');
+}
+
+// Refresh only unlocked nodes - resets their positions
+function refreshUnlockedNodes() {
+  savePositionSnapshot();
+  
+  nodes.forEach(n => {
+    if (!lockedNodes.has(n.id)) {
+      // Reset position for unlocked nodes - force simulation will reposition them
+      n.x = null;
+      n.y = null;
+      n.fx = null;
+      n.fy = null;
+    }
+    // Locked nodes keep their fx/fy so they stay in place
+  });
+  
+  renderGraph();
+  showToast('Unlocked nodes repositioned', 'info');
+}
+
+// ============================================================
+// INITIALIZATION
+// ============================================================
+async function init() {
+  showLoading(true);
+  
+  // Check admin status from localStorage
+  checkAdminStatus();
+  
+  // Test Supabase connection
+  const connected = await testConnection();
+  updateDbIndicator(connected);
+  
+  if (!connected) {
+    showToast('Failed to connect to database', 'error');
+    showLoading(false);
+    return;
+  }
+  
+  // Load assemblies
+  await loadAssemblies();
+  
+  // Set up event listeners
+  setupEventListeners();
+  
+  showLoading(false);
+}
+
+async function testConnection() {
+  try {
+    const { data, error } = await db
+      .from('logi_assemblies')
+      .select('id')
+      .limit(1);
+    return !error;
+  } catch (e) {
+    console.error('Connection test failed:', e);
+    return false;
+  }
+}
+
+function updateDbIndicator(connected) {
+  const indicator = document.getElementById('dbIndicator');
+  if (connected) {
+    indicator.classList.remove('disconnected');
+    indicator.innerHTML = '<span class="db-dot"></span><span>Supabase</span>';
+  } else {
+    indicator.classList.add('disconnected');
+    indicator.innerHTML = '<span class="db-dot"></span><span>Offline</span>';
+  }
+}
+
+// ============================================================
+// DATA LOADING
+// ============================================================
+async function loadAssemblies() {
+  const { data, error } = await db
+    .from('logi_assemblies')
+    .select('*')
+    .order('name');
+  
+  if (error) {
+    showToast('Failed to load assemblies', 'error');
+    console.error(error);
+    return;
+  }
+  
+  assemblies = data;
+  
+  // Populate dropdown
+  const select = document.getElementById('assemblySelect');
+  select.innerHTML = assemblies.map(a => 
+    `<option value="${a.id}">${a.name}</option>`
+  ).join('');
+  
+  // Load first assembly
+  if (assemblies.length > 0) {
+    currentAssemblyId = assemblies[0].id;
+    currentAssemblyName = assemblies[0].name;
+    await loadAssemblyData(currentAssemblyId);
+  }
+}
+
+// ============================================================
+// ASSEMBLY MANAGEMENT
+// ============================================================
+async function createNewAssembly() {
+  const name = prompt('Enter name for new assembly:');
+  if (!name || !name.trim()) return;
+  
+  const trimmedName = name.trim();
+  
+  try {
+    // Create the assembly
+    const { data: newAssembly, error: assemblyError } = await db
+      .from('logi_assemblies')
+      .insert({ name: trimmedName })
+      .select()
+      .single();
+    
+    if (assemblyError) throw assemblyError;
+    
+    // Create the root node with same name as assembly
+    const { error: nodeError } = await db
+      .from('logi_nodes')
+      .insert({
+        assembly_id: newAssembly.id,
+        name: trimmedName,
+        is_final: true,
+        status: 'NOT_STARTED',
+        x: 800,
+        y: 400
+      });
+    
+    if (nodeError) throw nodeError;
+    
+    showToast(`Assembly "${trimmedName}" created`, 'success');
+    
+    // Reload assemblies and select the new one
+    await loadAssemblies();
+    
+    // Select the new assembly
+    document.getElementById('assemblySelect').value = newAssembly.id;
+    currentAssemblyId = newAssembly.id;
+    currentAssemblyName = trimmedName;
+    await loadAssemblyData(newAssembly.id);
+    
+  } catch (error) {
+    showToast('Failed to create assembly', 'error');
+    console.error(error);
+  }
+}
+
+async function renameAssembly() {
+  if (!currentAssemblyId) {
+    showToast('No assembly selected', 'error');
+    return;
+  }
+  
+  const newName = prompt('Enter new name for assembly:', currentAssemblyName);
+  if (!newName || !newName.trim() || newName.trim() === currentAssemblyName) return;
+  
+  const trimmedName = newName.trim();
+  
+  try {
+    const { error } = await db
+      .from('logi_assemblies')
+      .update({ name: trimmedName, updated_at: new Date().toISOString() })
+      .eq('id', currentAssemblyId);
+    
+    if (error) throw error;
+    
+    currentAssemblyName = trimmedName;
+    
+    // Update dropdown
+    const option = document.querySelector(`#assemblySelect option[value="${currentAssemblyId}"]`);
+    if (option) option.textContent = trimmedName;
+    
+    // Update assemblies array
+    const assembly = assemblies.find(a => a.id === currentAssemblyId);
+    if (assembly) assembly.name = trimmedName;
+    
+    showToast(`Assembly renamed to "${trimmedName}"`, 'success');
+    
+  } catch (error) {
+    showToast('Failed to rename assembly', 'error');
+    console.error(error);
+  }
+}
+
+function confirmDeleteAssembly() {
+  if (!currentAssemblyId) {
+    showToast('No assembly selected', 'error');
+    return;
+  }
+  
+  if (assemblies.length <= 1) {
+    showToast('Cannot delete the last assembly', 'error');
+    return;
+  }
+  
+  showModal(
+    'Delete Assembly',
+    `Are you sure you want to delete "<strong>${currentAssemblyName}</strong>"?<br><br>
+    <span style="color:#e74c3c;">⚠️ This will permanently delete all nodes and links in this assembly!</span>`,
+    [
+      { label: 'Cancel', class: 'btn-secondary', action: hideModal },
+      { label: 'Delete', class: 'btn-danger', action: deleteAssembly }
+    ]
+  );
+}
+
+async function deleteAssembly() {
+  hideModal();
+  
+  try {
+    // Delete all links in this assembly
+    await db
+      .from('logi_links')
+      .delete()
+      .eq('assembly_id', currentAssemblyId);
+    
+    // Delete all nodes in this assembly
+    await db
+      .from('logi_nodes')
+      .delete()
+      .eq('assembly_id', currentAssemblyId);
+    
+    // Delete the assembly
+    const { error } = await db
+      .from('logi_assemblies')
+      .delete()
+      .eq('id', currentAssemblyId);
+    
+    if (error) throw error;
+    
+    showToast(`Assembly "${currentAssemblyName}" deleted`, 'success');
+    
+    // Reload assemblies
+    await loadAssemblies();
+    
+  } catch (error) {
+    showToast('Failed to delete assembly', 'error');
+    console.error(error);
+  }
+}
+
+async function duplicateAssembly() {
+  if (!currentAssemblyId) {
+    showToast('No assembly selected', 'error');
+    return;
+  }
+  
+  const newName = prompt('Enter name for duplicated assembly:', currentAssemblyName + ' (copy)');
+  if (!newName || !newName.trim()) return;
+  
+  const trimmedName = newName.trim();
+  
+  setStatus('Duplicating assembly...', 'loading');
+  
+  try {
+    // Create new assembly
+    const { data: newAssembly, error: assemblyError } = await db
+      .from('logi_assemblies')
+      .insert({ name: trimmedName })
+      .select()
+      .single();
+    
+    if (assemblyError) throw assemblyError;
+    
+    // Get all nodes from current assembly
+    const { data: oldNodes, error: nodesError } = await db
+      .from('logi_nodes')
+      .select('*')
+      .eq('assembly_id', currentAssemblyId)
+      .eq('deleted', false);
+    
+    if (nodesError) throw nodesError;
+    
+    // Create a map of old node IDs to new node IDs
+    const nodeIdMap = new Map();
+    
+    // Duplicate all nodes
+    for (const oldNode of oldNodes) {
+      const { data: newNode, error } = await db
+        .from('logi_nodes')
+        .insert({
+          assembly_id: newAssembly.id,
+          name: oldNode.name,
+          part_number: oldNode.part_number,
+          status: oldNode.status,
+          qty: oldNode.qty,
+          group_num: oldNode.group_num,
+          sequence_num: oldNode.sequence_num,
+          notes: oldNode.notes,
+          is_final: oldNode.is_final,
+          is_orphan: oldNode.is_orphan,
+          is_locked: oldNode.is_locked,
+          x: oldNode.x,
+          y: oldNode.y
+        })
+        .select()
+        .single();
+      
+      if (error) throw error;
+      nodeIdMap.set(oldNode.id, newNode.id);
+    }
+    
+    // Get all links from current assembly
+    const { data: oldLinks, error: linksError } = await db
+      .from('logi_links')
+      .select('*')
+      .eq('assembly_id', currentAssemblyId)
+      .eq('deleted', false);
+    
+    if (linksError) throw linksError;
+    
+    // Duplicate all links with new node IDs
+    for (const oldLink of oldLinks) {
+      const newChildId = nodeIdMap.get(oldLink.child_id);
+      const newParentId = nodeIdMap.get(oldLink.parent_id);
+      
+      if (newChildId && newParentId) {
+        await db
+          .from('logi_links')
+          .insert({
+            assembly_id: newAssembly.id,
+            child_id: newChildId,
+            parent_id: newParentId,
+            fastener: oldLink.fastener,
+            fastener_qty: oldLink.fastener_qty
+          });
+      }
+    }
+    
+    showToast(`Assembly duplicated as "${trimmedName}"`, 'success');
+    setStatus('');
+    
+    // Reload assemblies and select the new one
+    await loadAssemblies();
+    document.getElementById('assemblySelect').value = newAssembly.id;
+    currentAssemblyId = newAssembly.id;
+    currentAssemblyName = trimmedName;
+    await loadAssemblyData(newAssembly.id);
+    
+  } catch (error) {
+    showToast('Failed to duplicate assembly', 'error');
+    console.error(error);
+    setStatus('');
+  }
+}
+
+async function loadAssemblyData(assemblyId) {
+  showLoading(true);
+  setStatus('Loading...', 'loading');
+  
+  // Load nodes
+  const { data: nodesData, error: nodesError } = await db
+    .from('logi_nodes')
+    .select('*')
+    .eq('assembly_id', assemblyId)
+    .eq('deleted', false);
+  
+  if (nodesError) {
+    showToast('Failed to load nodes', 'error');
+    console.error(nodesError);
+    showLoading(false);
+    return;
+  }
+  
+  // Load links
+  const { data: linksData, error: linksError } = await db
+    .from('logi_links')
+    .select('*')
+    .eq('assembly_id', assemblyId)
+    .eq('deleted', false);
+  
+  if (linksError) {
+    showToast('Failed to load links', 'error');
+    console.error(linksError);
+    showLoading(false);
+    return;
+  }
+  
+  // Clear and rebuild locked nodes set from database
+  lockedNodes.clear();
+  
+  // Process data
+  nodes = nodesData.map(n => {
+    // Add to lockedNodes set if is_locked is true
+    if (n.is_locked) {
+      lockedNodes.add(n.id);
+    }
+    
+    return {
+      ...n,
+      goesInto: [],
+      receivesFrom: [],
+      level: -1,
+      width: calculateNodeWidth(n.name, n.part_number),
+      height: calculateNodeHeight(n.name, n.part_number),
+      // For locked nodes, set fx/fy immediately to prevent force simulation from moving them
+      fx: n.is_locked ? n.x : null,
+      fy: n.is_locked ? n.y : null
+    };
+  });
+  
+  links = linksData;
+  
+  // Build relationships
+  const nodeMap = new Map(nodes.map(n => [n.id, n]));
+  
+  links.forEach(link => {
+    const child = nodeMap.get(link.child_id);
+    const parent = nodeMap.get(link.parent_id);
+    
+    if (child && parent) {
+      if (!child.goesInto.includes(link.parent_id)) {
+        child.goesInto.push(link.parent_id);
+      }
+      if (!parent.receivesFrom.includes(link.child_id)) {
+        parent.receivesFrom.push(link.child_id);
+      }
+    }
+  });
+  
+  // Calculate levels
+  calculateLevels();
+  
+  // Render
+  renderGraph();
+  
+  const lockedCount = lockedNodes.size;
+  setStatus(`Loaded ${nodes.length} nodes (${lockedCount} locked)`, 'success');
+  setTimeout(() => setStatus(''), 2000);
+  showLoading(false);
+}
+
+// Load data but preserve positions of locked nodes
+async function loadAssemblyDataPreservingLocked() {
+  // Save current positions of locked nodes
+  const savedPositions = new Map();
+  nodes.forEach(n => {
+    if (lockedNodes.has(n.id)) {
+      savedPositions.set(n.id, { x: n.x, y: n.y, fx: n.fx, fy: n.fy });
+    }
+  });
+  
+  // Reload data
+  await loadAssemblyData(currentAssemblyId);
+  
+  // Restore locked positions
+  nodes.forEach(n => {
+    if (savedPositions.has(n.id)) {
+      const pos = savedPositions.get(n.id);
+      n.x = pos.x;
+      n.y = pos.y;
+      n.fx = pos.fx;
+      n.fy = pos.fy;
+    }
+  });
+  
+  renderGraph();
+}
+
+function calculateLevels() {
+  // Find final node
+  const finalNode = nodes.find(n => n.is_final);
+  if (!finalNode) {
+    // No final node, assign level 1 to all
+    nodes.forEach(n => n.level = 1);
+    return;
+  }
+  
+  // BFS from final node
+  finalNode.level = 8;
+  const queue = [finalNode.id];
+  const visited = new Set([finalNode.id]);
+  
+  while (queue.length > 0) {
+    const nodeId = queue.shift();
+    const node = nodes.find(n => n.id === nodeId);
+    if (!node) continue;
+    
+    // All children get level = parent level - 1
+    node.receivesFrom.forEach(childId => {
+      const child = nodes.find(n => n.id === childId);
+      if (child) {
+        const newLevel = Math.max(1, node.level - 1);
+        if (child.level === -1 || newLevel > child.level) {
+          child.level = newLevel;
+        }
+        if (!visited.has(childId)) {
+          visited.add(childId);
+          queue.push(childId);
+        }
+      }
+    });
+  }
+  
+  // Handle unvisited nodes
+  nodes.forEach(n => {
+    if (n.level === -1) {
+      // Check what this node goes into
+      let maxTargetLevel = 0;
+      n.goesInto.forEach(targetId => {
+        const target = nodes.find(t => t.id === targetId);
+        if (target && target.level > 0) {
+          maxTargetLevel = Math.max(maxTargetLevel, target.level);
+        }
+      });
+      n.level = maxTargetLevel > 0 ? Math.max(1, maxTargetLevel - 1) : 1;
+    }
+  });
+}
+
+// ============================================================
+// UTILITY FUNCTIONS
+// ============================================================
+function calculateNodeWidth(name, partNumber) {
+  let width = NODE_WIDTH_BASE;
+  if (name && name.length > 15) width = Math.max(width, 130);
+  if (name && name.length > 20) width = Math.max(width, 140);
+  if (partNumber && partNumber.length > 12) width = Math.max(width, 135);
+  if (partNumber && partNumber.length > 15) width = Math.max(width, 145);
+  return Math.min(width, NODE_WIDTH_MAX);
+}
+
+function calculateNodeHeight(name, partNumber) {
+  const lines = name ? Math.ceil(name.length / 13) : 1;
+  let h = lines <= 1 ? 36 : (lines === 2 ? 44 : 52);
+  if (partNumber) h += 12;
+  return h;
+}
+
+function calculateFontSize(name, hasPartNumber) {
+  const baseSize = hasPartNumber ? 9 : 11;
+  const nameLen = name ? name.length : 0;
+  if (nameLen <= 10) return hasPartNumber ? 10 : 13;
+  if (nameLen <= 15) return hasPartNumber ? 9 : 12;
+  if (nameLen <= 20) return hasPartNumber ? 9 : 11;
+  return baseSize;
+}
+
+function wrapText(text, maxChars) {
+  if (!text) return [''];
+  const words = text.split(' ');
+  const lines = [];
+  let line = '';
+  words.forEach(word => {
+    if ((line + ' ' + word).trim().length <= maxChars) {
+      line = (line + ' ' + word).trim();
+    } else {
+      if (line) lines.push(line);
+      line = word.length > maxChars ? word.substring(0, maxChars - 2) + '..' : word;
+    }
+  });
+  if (line) lines.push(line);
+  if (lines.length > 3) { lines.length = 3; lines[2] = lines[2].substring(0, maxChars - 3) + '...'; }
+  return lines;
+}
+
+function getSequenceBadge(seq) {
+  if (seq === null || seq === undefined) return null;
+  const num = parseInt(seq);
+  if (isNaN(num) || num < 0) return null;
+  return num < SEQUENCE_BADGES.length ? SEQUENCE_BADGES[num] : `(${num})`;
+}
+
+function darkenColor(hex, factor = 0.7) {
+  hex = hex.replace('#', '');
+  const r = Math.floor(parseInt(hex.substring(0, 2), 16) * factor);
+  const g = Math.floor(parseInt(hex.substring(2, 4), 16) * factor);
+  const b = Math.floor(parseInt(hex.substring(4, 6), 16) * factor);
+  return `#${r.toString(16).padStart(2,'0')}${g.toString(16).padStart(2,'0')}${b.toString(16).padStart(2,'0')}`;
+}
+
+function getFastenerColor(fastener) {
+  if (!fastener || fastener === "" || fastener === "None") return null;
+  const upper = fastener.toUpperCase();
+  if (upper.includes("PRESS")) return FASTENER_COLORS.PRESS;
+  if (upper === "ORIGINAL") return FASTENER_COLORS.ORIGINAL;
+  if (upper.startsWith("CBST")) return FASTENER_COLORS.CBST;
+  if (upper.startsWith("CBE") || upper.startsWith("CB")) return FASTENER_COLORS.CBE;
+  if (upper.startsWith("MS")) return FASTENER_COLORS.MS;
+  if (/^M\d/.test(upper)) return FASTENER_COLORS.M;
+  return FASTENER_COLORS.OTHER;
+}
+
+function getNodeColor(node) {
+  if (currentColorMode === 'status' && node.status) {
+    const statusColor = STATUS_COLORS[node.status];
+    return statusColor ? statusColor.bg : LEVEL_COLORS[0];
+  }
+  if (currentColorMode === 'group' && node.group_num !== null) {
+    return GROUP_COLORS[node.group_num % GROUP_COLORS.length];
+  }
+  return LEVEL_COLORS[Math.min(node.level - 1, 7)];
+}
+
+function toggleExportDropdown() {
+  document.getElementById('lockDropdown')?.classList.remove('show');
+  document.getElementById('exportDropdown').classList.toggle('show');
+}
+
+function toggleLockDropdown() {
+  document.getElementById('exportDropdown')?.classList.remove('show');
+  document.getElementById('lockDropdown').classList.toggle('show');
+}
+
+function closeLockDropdown() {
+  document.getElementById('lockDropdown')?.classList.remove('show');
+}
+
+function getAllDescendants(nodeId) {
+  const descendants = new Set();
+  const queue = [...(nodes.find(n => n.id === nodeId)?.receivesFrom || [])];
+  
+  while (queue.length > 0) {
+    const childId = queue.shift();
+    if (descendants.has(childId)) continue;
+    descendants.add(childId);
+    const child = nodes.find(n => n.id === childId);
+    if (child) {
+      queue.push(...child.receivesFrom);
+    }
+  }
+  return descendants;
+}
+
+// ============================================================
+// RADIAL LAYOUT
+// ============================================================
+function calculateRadialPositions(parentNode, children, grandparentNode) {
+  if (children.length === 0) return;
+  
+  // Filter out locked children - they keep their position
+  const unlockedChildren = children.filter(c => !lockedNodes.has(c.id));
+  if (unlockedChildren.length === 0) return;
+  
+  // Reference angle from parent to grandparent (0° default: right)
+  let refAngle = 0;
+  if (grandparentNode) {
+    const dx = grandparentNode.x - parentNode.x;
+    const dy = grandparentNode.y - parentNode.y;
+    refAngle = Math.atan2(dy, dx) * (180 / Math.PI);
+  }
+  
+  // Dead zone around parent-grandparent arrow
+  const deadZoneHalf = RADIAL_DEAD_ZONE / 2;
+  const startAngle = refAngle + deadZoneHalf + 180;
+  const availableArc = 360 - RADIAL_DEAD_ZONE;
+  const angleStep = availableArc / Math.max(unlockedChildren.length, 1);
+  
+  unlockedChildren.forEach((child, index) => {
+    const angle = startAngle + (index + 0.5) * angleStep;
+    const radians = angle * (Math.PI / 180);
+    const levelDiff = Math.abs((child.level || 1) - (parentNode.level || 1));
+    const radius = RADIAL_RADIUS * (1 + levelDiff * 0.3);
+    
+    child.x = parentNode.x + radius * Math.cos(radians);
+    child.y = parentNode.y + radius * Math.sin(radians);
+    child.fx = child.x;
+    child.fy = child.y;
+  });
+}
+
+function applyRadialLayout(visibleNodes, nodeMap) {
+  const processedChildren = new Set();
+  const sortedNodes = [...visibleNodes].sort((a, b) => (b.level || 0) - (a.level || 0));
+  
+  sortedNodes.forEach(node => {
+    // Skip locked parent nodes for radial layout
+    if (lockedNodes.has(node.id)) return;
+    
+    if (node.level >= 3 && node.receivesFrom.length > 0) {
+      const children = node.receivesFrom
+        .map(id => nodeMap.get(id))
+        .filter(c => c && !processedChildren.has(c.id) && !lockedNodes.has(c.id));
+      
+      if (children.length === 0) return;
+      
+      let grandparent = null;
+      if (node.goesInto.length > 0) {
+        grandparent = nodeMap.get(node.goesInto[0]);
+      }
+      
+      calculateRadialPositions(node, children, grandparent);
+      children.forEach(c => processedChildren.add(c.id));
+    }
+  });
+}
+
+// ============================================================
+// UI HELPERS
+// ============================================================
+function setStatus(msg, type = 'loading') {
+  const el = document.getElementById('statusIndicator');
+  el.textContent = msg;
+  el.className = 'status-text ' + type;
+}
+
+function showLoading(show) {
+  document.getElementById('loadingOverlay').classList.toggle('show', show);
+}
+
+function showToast(message, type = 'info') {
+  const container = document.getElementById('toastContainer');
+  const toast = document.createElement('div');
+  toast.className = `toast ${type}`;
+  toast.textContent = message;
+  container.appendChild(toast);
+  
+  setTimeout(() => {
+    toast.style.opacity = '0';
+    setTimeout(() => toast.remove(), 300);
+  }, 3000);
+}
+
+function toggleExportDropdown() {
+  document.getElementById('exportDropdown').classList.toggle('show');
+}
+
+// ============================================================
+// LINK PATH CALCULATION
+// ============================================================
+function calculateLinkPath(source, target) {
+  const sourceW = source.width / 2;
+  const sourceH = source.height / 2;
+  const targetW = target.width / 2;
+  const targetH = target.height / 2;
+  
+  const dx = target.x - source.x;
+  const dy = target.y - source.y;
+  
+  let sx, sy, tx, ty;
+  
+  if (dx >= 0) {
+    sx = source.x + sourceW;
+    const ratio = Math.abs(dy) / Math.max(Math.abs(dx), 1);
+    sy = source.y + (dy > 0 ? 1 : -1) * Math.min(sourceH * 0.8, sourceH * ratio);
+  } else {
+    sx = source.x - sourceW;
+    const ratio = Math.abs(dy) / Math.max(Math.abs(dx), 1);
+    sy = source.y + (dy > 0 ? 1 : -1) * Math.min(sourceH * 0.8, sourceH * ratio);
+  }
+  
+  if (dx >= 0) {
+    tx = target.x - targetW;
+    const ratio = Math.abs(dy) / Math.max(Math.abs(dx), 1);
+    ty = target.y - (dy > 0 ? 1 : -1) * Math.min(targetH * 0.8, targetH * ratio);
+  } else {
+    tx = target.x + targetW;
+    const ratio = Math.abs(dy) / Math.max(Math.abs(dx), 1);
+    ty = target.y - (dy > 0 ? 1 : -1) * Math.min(targetH * 0.8, targetH * ratio);
+  }
+  
+  if (Math.abs(dy) > Math.abs(dx) * 2) {
+    if (dy > 0) {
+      sy = source.y + sourceH;
+      ty = target.y - targetH;
+    } else {
+      sy = source.y - sourceH;
+      ty = target.y + targetH;
+    }
+  }
+  
+  const midX = (sx + tx) / 2;
+  let cx1, cy1, cx2, cy2;
+  
+  if (Math.abs(dx) >= Math.abs(dy)) {
+    cx1 = midX; cy1 = sy; cx2 = midX; cy2 = ty;
+  } else {
+    cx1 = sx + (tx - sx) * 0.3; cy1 = sy + (ty - sy) * 0.5;
+    cx2 = sx + (tx - sx) * 0.7; cy2 = sy + (ty - sy) * 0.5;
+  }
+  
+  return `M ${sx},${sy} C ${cx1},${cy1} ${cx2},${cy2} ${tx},${ty}`;
+}
+
+// ============================================================
+// SHAPE DRAWING
+// ============================================================
+function drawShape(selection, shapeType, width, height, fill, stroke, isMultiParent, isOrphan) {
+  const halfW = width / 2, halfH = height / 2;
+  const strokeWidth = (isMultiParent || isOrphan) ? 3 : 2;
+  const dashArray = isOrphan ? '5,3' : 'none';
+  const finalStroke = isOrphan ? '#9b59b6' : stroke;
+
+  selection.selectAll('.node-shape, .multi-parent-indicator').remove();
+
+  const shapes = {
+    rectangle: () => {
+      selection.insert('rect', ':first-child').attr('class', 'node-shape')
+        .attr('x', -halfW).attr('y', -halfH).attr('width', width).attr('height', height)
+        .attr('fill', fill).attr('stroke', finalStroke).attr('stroke-width', strokeWidth)
+        .attr('stroke-dasharray', dashArray).attr('rx', 0);
+    },
+    rounded_rectangle: () => {
+      selection.insert('rect', ':first-child').attr('class', 'node-shape')
+        .attr('x', -halfW).attr('y', -halfH).attr('width', width).attr('height', height)
+        .attr('fill', fill).attr('stroke', finalStroke).attr('stroke-width', strokeWidth)
+        .attr('stroke-dasharray', dashArray).attr('rx', 6);
+    },
+    stadium: () => {
+      selection.insert('rect', ':first-child').attr('class', 'node-shape')
+        .attr('x', -halfW).attr('y', -halfH).attr('width', width).attr('height', height)
+        .attr('fill', fill).attr('stroke', finalStroke).attr('stroke-width', strokeWidth)
+        .attr('stroke-dasharray', dashArray).attr('rx', halfH).attr('ry', halfH);
+    },
+    parallelogram: () => {
+      const sk = 10;
+      const pts = `${-halfW+sk},${-halfH} ${halfW+sk},${-halfH} ${halfW-sk},${halfH} ${-halfW-sk},${halfH}`;
+      selection.insert('polygon', ':first-child').attr('class', 'node-shape')
+        .attr('points', pts).attr('fill', fill).attr('stroke', finalStroke)
+        .attr('stroke-width', strokeWidth).attr('stroke-dasharray', dashArray);
+    },
+    pentagon: () => {
+      const a = (2*Math.PI)/5, sa = -Math.PI/2, rx = halfW*0.85, ry = halfH*0.9;
+      const pts = Array.from({length:5}, (_,i) => `${rx*Math.cos(sa+i*a)},${ry*Math.sin(sa+i*a)}`).join(' ');
+      selection.insert('polygon', ':first-child').attr('class', 'node-shape')
+        .attr('points', pts).attr('fill', fill).attr('stroke', finalStroke)
+        .attr('stroke-width', strokeWidth).attr('stroke-dasharray', dashArray);
+    },
+    hexagon: () => {
+      const pts = `${-halfW+10},${-halfH} ${halfW-10},${-halfH} ${halfW},0 ${halfW-10},${halfH} ${-halfW+10},${halfH} ${-halfW},0`;
+      selection.insert('polygon', ':first-child').attr('class', 'node-shape')
+        .attr('points', pts).attr('fill', fill).attr('stroke', finalStroke)
+        .attr('stroke-width', strokeWidth).attr('stroke-dasharray', dashArray);
+    },
+    ellipse: () => {
+      selection.insert('ellipse', ':first-child').attr('class', 'node-shape')
+        .attr('cx', 0).attr('cy', 0).attr('rx', halfW).attr('ry', halfH)
+        .attr('fill', fill).attr('stroke', finalStroke)
+        .attr('stroke-width', strokeWidth).attr('stroke-dasharray', dashArray);
+    },
+    octagon: () => {
+      const c = Math.min(halfW, halfH) * 0.35;
+      const pts = `${-halfW+c},${-halfH} ${halfW-c},${-halfH} ${halfW},${-halfH+c} ${halfW},${halfH-c} ${halfW-c},${halfH} ${-halfW+c},${halfH} ${-halfW},${halfH-c} ${-halfW},${-halfH+c}`;
+      selection.insert('polygon', ':first-child').attr('class', 'node-shape')
+        .attr('points', pts).attr('fill', fill).attr('stroke', finalStroke)
+        .attr('stroke-width', strokeWidth).attr('stroke-dasharray', dashArray);
+    }
+  };
+  
+  (shapes[shapeType] || shapes.rectangle)();
+  
+  if (isMultiParent) {
+    selection.insert('rect', ':first-child').attr('class', 'multi-parent-indicator')
+      .attr('x', -halfW - 4).attr('y', -halfH - 4)
+      .attr('width', width + 8).attr('height', height + 8)
+      .attr('stroke', '#e74c3c').attr('stroke-width', 2).attr('rx', 4).attr('fill', 'none');
+  }
+}
+
+// ============================================================
+// VISIBILITY CHECK
+// ============================================================
+function isNodeVisible(node) {
+  if (currentLevelFilter !== 'all' && node.level > parseInt(currentLevelFilter)) {
+    return false;
+  }
+  
+  if (node.is_final) return true;
+  if (node.goesInto.length === 0) return true;
+  
+  for (const targetId of node.goesInto) {
+    if (!collapsedNodes.has(targetId)) return true;
+  }
+  return false;
+}
+
+// ============================================================
+// RENDER GRAPH
+// ============================================================
+function renderGraph() {
+  const container = document.getElementById('treeContainer');
+  container.querySelector('svg').innerHTML = '';
+  
+  if (nodes.length === 0) {
+    return;
+  }
+  
+  if (simulation) simulation.stop();
+  
+  // Filter visible nodes
+  const visibleNodes = nodes.filter(n => isNodeVisible(n));
+  const visibleNodeIds = new Set(visibleNodes.map(n => n.id));
+  
+  // Filter visible links
+  const visibleLinks = links.filter(l => 
+    visibleNodeIds.has(l.child_id) && visibleNodeIds.has(l.parent_id)
+  );
+  
+  // Create node map
+  const nodeMap = new Map(visibleNodes.map(n => [n.id, n]));
+  
+  // Create simulation links
+  const simLinks = visibleLinks.map(l => ({
+    source: nodeMap.get(l.child_id),
+    target: nodeMap.get(l.parent_id),
+    ...l
+  })).filter(l => l.source && l.target);
+  
+  // Calculate dimensions
+  const maxLevel = Math.max(...visibleNodes.map(n => n.level), 1);
+  const width = Math.max(1400, maxLevel * 180 + 300);
+  const height = Math.max(700, visibleNodes.length * 45 + 200);
+  
+  const svg = d3.select('#treeSvg')
+    .attr('width', width)
+    .attr('height', height);
+  
+  // Arrow marker
+  svg.append('defs').append('marker')
+    .attr('id', 'arrowhead')
+    .attr('viewBox', '-0 -5 10 10')
+    .attr('refX', 8)
+    .attr('refY', 0)
+    .attr('orient', 'auto')
+    .attr('markerWidth', 6)
+    .attr('markerHeight', 6)
+    .append('path')
+    .attr('d', 'M 0,-4 L 8,0 L 0,4')
+    .attr('fill', '#666');
+  
+  const g = svg.append('g').attr('class', 'main');
+  
+  // Initialize positions
+  const levelSpacing = 160;
+  const margin = { left: 100 };
+  
+  visibleNodes.forEach(n => {
+    // Only initialize position for unlocked nodes without position
+    if (!lockedNodes.has(n.id) && (n.x === null || n.x === undefined)) {
+      n.x = margin.left + (n.level - 1) * levelSpacing + Math.random() * 50;
+      n.y = height / 2 + (Math.random() - 0.5) * 300;
+    }
+    
+    // Keep locked nodes fixed
+    if (lockedNodes.has(n.id)) {
+      n.fx = n.x;
+      n.fy = n.y;
+    }
+  });
+  
+  // Apply radial layout if selected (only for unlocked nodes)
+  if (currentLayoutMode === 'radial') {
+    applyRadialLayout(visibleNodes, nodeMap);
+  }
+  
+  // Create simulation with layout-dependent strengths
+  const xStrength = currentLayoutMode === 'radial' ? 0.03 : 0.15;
+  const yStrength = currentLayoutMode === 'radial' ? 0.02 : 0.05;
+  
+  simulation = d3.forceSimulation(visibleNodes)
+    .force('link', d3.forceLink(simLinks).id(d => d.id).distance(120).strength(0.3))
+    .force('charge', d3.forceManyBody().strength(-200))
+    .force('collide', d3.forceCollide().radius(d => Math.max(d.width, d.height) / 2 + 10).strength(0.8))
+    .force('x', d3.forceX(d => margin.left + (d.level - 1) * levelSpacing).strength(xStrength))
+    .force('y', d3.forceY(height / 2).strength(yStrength))
+    .alphaDecay(0.03)
+    .velocityDecay(0.4);
+  
+  // Draw links
+  const linkElements = g.selectAll('.link')
+    .data(simLinks)
+    .enter()
+    .append('path')
+    .attr('class', 'link')
+    .attr('stroke', d => getFastenerColor(d.fastener) || '#999')
+    .attr('stroke-width', 1.5)
+    .attr('fill', 'none')
+    .attr('marker-end', 'url(#arrowhead)')
+    .on('click', (e, d) => {
+      e.stopPropagation();
+      selectLink(d);
+    })
+    .on('contextmenu', (e, d) => {
+      e.preventDefault();
+      showLinkContextMenu(e, d);
+    });
+  
+  // Draw link labels
+  const linkLabelGroups = g.selectAll('.link-label-group')
+    .data(simLinks.filter(l => l.fastener))
+    .enter()
+    .append('g')
+    .attr('class', 'link-label-group');
+  
+  linkLabelGroups.append('rect')
+    .attr('class', 'link-label-bg')
+    .attr('fill', 'white')
+    .attr('rx', 2)
+    .attr('ry', 2);
+  
+  linkLabelGroups.append('text')
+    .attr('class', 'link-label')
+    .attr('text-anchor', 'middle')
+    .attr('fill', d => getFastenerColor(d.fastener) || '#666')
+    .attr('dy', '0.35em')
+    .text(d => d.fastener_qty ? `${d.fastener}×${d.fastener_qty}` : d.fastener);
+  
+  linkLabelGroups.each(function() {
+    const group = d3.select(this);
+    const text = group.select('text');
+    const bbox = text.node().getBBox();
+    group.select('rect')
+      .attr('x', bbox.x - 3)
+      .attr('y', bbox.y - 1)
+      .attr('width', bbox.width + 6)
+      .attr('height', bbox.height + 2);
+  });
+  
+  // Draw nodes
+  const nodeElements = g.selectAll('.node')
+    .data(visibleNodes)
+    .enter()
+    .append('g')
+    .attr('class', 'node')
+    .call(d3.drag()
+      .on('start', dragStarted)
+      .on('drag', dragged)
+      .on('end', dragEnded)
+    )
+    .on('click', (e, d) => {
+      e.stopPropagation();
+      selectNode(d);
+    })
+    .on('contextmenu', (e, d) => {
+      e.preventDefault();
+      showNodeContextMenu(e, d);
+    })
+    .on('mouseenter', (e, d) => {
+      // Drop target highlighting for orphan reconnection
+      if (draggingOrphan && draggingOrphan.id !== d.id && !d.is_orphan) {
+        dropTarget = d;
+        d3.select(e.currentTarget).classed('drop-target', true);
+      }
+    })
+    .on('mouseleave', (e, d) => {
+      if (draggingOrphan) {
+        dropTarget = null;
+        d3.select(e.currentTarget).classed('drop-target', false);
+      }
+    });
+  
+  // Draw shapes
+  nodeElements.each(function(d) {
+    const shape = LEVEL_SHAPES[Math.min(d.level - 1, 7)];
+    const fill = getNodeColor(d);
+    const stroke = darkenColor(fill);
+    const isMultiParent = d.receivesFrom.length > 1;
+    drawShape(d3.select(this), shape, d.width, d.height, fill, stroke, isMultiParent, d.is_orphan);
+  });
+  
+  // Status indicator
+  nodeElements.filter(d => d.status).append('circle')
+    .attr('class', 'status-indicator')
+    .attr('cx', d => -d.width/2 + 8)
+    .attr('cy', d => -d.height/2 + 8)
+    .attr('r', 4)
+    .attr('fill', d => STATUS_COLORS[d.status]?.fill || '#bdc3c7')
+    .attr('stroke', d => STATUS_COLORS[d.status]?.stroke || '#95a5a6');
+  
+  // Sequence badge
+  nodeElements.filter(d => d.sequence_num !== null).each(function(d) {
+    const badge = getSequenceBadge(d.sequence_num);
+    if (!badge) return;
+    d3.select(this).append('text')
+      .attr('class', 'sequence-badge')
+      .attr('x', d.width/2 - 6)
+      .attr('y', -d.height/2 - 2)
+      .attr('text-anchor', 'middle')
+      .attr('dy', '0.35em')
+      .text(badge);
+  });
+  
+  // Node labels
+  nodeElements.each(function(d) {
+    const group = d3.select(this);
+    const hasPN = d.part_number && d.part_number.length > 0;
+    const fontSize = calculateFontSize(d.name, hasPN);
+    const maxChars = Math.floor(d.width / 8);
+    const lines = wrapText(d.name, maxChars);
+    const lineHeight = fontSize + 2;
+    const totalH = lines.length * lineHeight;
+    const startY = hasPN ? -totalH/2 - 4 : -totalH/2 + lineHeight/2;
+    
+    lines.forEach((line, i) => {
+      group.append('text')
+        .attr('class', 'node-label')
+        .attr('text-anchor', 'middle')
+        .attr('y', startY + i * lineHeight)
+        .attr('font-size', fontSize + 'px')
+        .text(line);
+    });
+    
+    if (hasPN) {
+      const maxPNChars = Math.floor(d.width / 6);
+      const pnText = d.part_number.length > maxPNChars 
+        ? d.part_number.substring(0, maxPNChars - 2) + '..' 
+        : d.part_number;
+      group.append('text')
+        .attr('class', 'node-pn')
+        .attr('text-anchor', 'middle')
+        .attr('y', startY + lines.length * lineHeight + 4)
+        .attr('font-size', '7px')
+        .text(pnText);
+    }
+  });
+  
+  // Collapse indicator
+  nodeElements.filter(d => d.receivesFrom.length > 0).each(function(d) {
+    const group = d3.select(this);
+    group.append('circle')
+      .attr('class', 'collapse-indicator')
+      .attr('cx', -d.width/2 + 8)
+      .attr('cy', d.height/2 - 8)
+      .attr('r', 6)
+      .on('click', (e) => {
+        e.stopPropagation();
+        toggleCollapse(d.id);
+      });
+    group.append('text')
+      .attr('class', 'toggle-icon')
+      .attr('x', -d.width/2 + 8)
+      .attr('y', d.height/2 - 8)
+      .attr('text-anchor', 'middle')
+      .attr('dy', '0.35em')
+      .text(collapsedNodes.has(d.id) ? '+' : '−')
+      .on('click', (e) => {
+        e.stopPropagation();
+        toggleCollapse(d.id);
+      });
+  });
+  
+  // Lock indicator (admin only)
+  if (isAdmin) {
+    nodeElements.filter(d => lockedNodes.has(d.id)).each(function(d) {
+      d3.select(this).append('text')
+        .attr('class', 'lock-indicator')
+        .attr('x', d.width/2 - 8)
+        .attr('y', d.height/2 - 6)
+        .attr('text-anchor', 'middle')
+        .text('🔒');
+    });
+  }
+  
+  // Tooltip
+  nodeElements.append('title').text(d => {
+    let t = d.name + `\nLevel: ${d.level}`;
+    if (d.part_number) t += `\nP/N: ${d.part_number}`;
+    if (d.status) t += `\nStatus: ${d.status}`;
+    if (d.notes) t += `\nNotes: ${d.notes}`;
+    return t;
+  });
+  
+  // Simulation tick
+  simulation.on('tick', () => {
+    visibleNodes.forEach(n => {
+      n.x = Math.max(n.width/2 + 10, Math.min(width - n.width/2 - 10, n.x));
+      n.y = Math.max(n.height/2 + 10, Math.min(height - n.height/2 - 10, n.y));
+    });
+    
+    linkElements.attr('d', d => calculateLinkPath(d.source, d.target));
+    linkLabelGroups.attr('transform', d => 
+      `translate(${(d.source.x + d.target.x)/2}, ${(d.source.y + d.target.y)/2})`
+    );
+    nodeElements.attr('transform', d => `translate(${d.x},${d.y})`);
+  });
+}
+
+// ============================================================
+// DRAG HANDLERS
+// ============================================================
+function dragStarted(e, d) {
+  // Non-admin cannot drag
+  if (!isAdmin) return;
+  
+  // Locked nodes can only be moved with Shift key
+  if (lockedNodes.has(d.id) && !shiftKeyPressed) {
+    showToast('Node is locked. Use Shift+Drag to move.', 'warning');
+    return;
+  }
+  
+  // Save position snapshot for undo
+  savePositionSnapshot();
+  
+  if (!e.active) simulation.alphaTarget(0.1).restart();
+  d.fx = d.x;
+  d.fy = d.y;
+  
+  // Track dragging orphan for reconnection
+  if (d.is_orphan) {
+    draggingOrphan = d;
+  }
+  
+  // Highlight children if shift is held
+  if (shiftKeyPressed && !d.is_orphan) {
+    const descendants = getAllDescendants(d.id);
+    d3.selectAll('.node').filter(n => descendants.has(n.id)).classed('child-highlight', true);
+    d3.select(e.sourceEvent.target.closest('.node')).classed('dragging-children', true);
+  }
+}
+
+function dragged(e, d) {
+  // Non-admin cannot drag
+  if (!isAdmin) return;
+  
+  // Locked nodes can only be moved with Shift key
+  if (lockedNodes.has(d.id) && !shiftKeyPressed) return;
+  
+  const dx = e.x - d.x;
+  const dy = e.y - d.y;
+  
+  d.fx = e.x;
+  d.fy = e.y;
+  d.x = e.x;
+  d.y = e.y;
+  
+  // If shift is held, move children too (including locked ones)
+  if (shiftKeyPressed && !d.is_orphan) {
+    moveDescendants(d.id, dx, dy);
+  }
+}
+
+function dragEnded(e, d) {
+  // Non-admin cannot drag
+  if (!isAdmin) return;
+  
+  if (!e.active) simulation.alphaTarget(0);
+  d.fx = d.x;
+  d.fy = d.y;
+  
+  // Handle orphan reconnection
+  if (draggingOrphan && dropTarget) {
+    reconnectOrphan(draggingOrphan.id, dropTarget.id);
+  }
+  
+  // Clear all drag states
+  draggingOrphan = null;
+  dropTarget = null;
+  d3.selectAll('.node')
+    .classed('drop-target', false)
+    .classed('child-highlight', false)
+    .classed('dragging-children', false);
+}
+
+function moveDescendants(nodeId, dx, dy) {
+  const descendants = getAllDescendants(nodeId);
+  
+  descendants.forEach(childId => {
+    const child = nodes.find(n => n.id === childId);
+    if (child) {
+      child.x += dx;
+      child.y += dy;
+      child.fx = child.x;
+      child.fy = child.y;
+    }
+  });
+}
+
+// ============================================================
+// SELECTION
+// ============================================================
+function selectNode(node) {
+  selectedNode = node;
+  selectedLink = null;
+  
+  d3.selectAll('.node').classed('selected', false);
+  d3.selectAll('.link').classed('selected', false);
+  d3.selectAll('.node').filter(d => d.id === node.id).classed('selected', true);
+  
+  openNodeEditPanel(node);
+}
+
+function selectLink(link) {
+  selectedLink = link;
+  selectedNode = null;
+  
+  d3.selectAll('.node').classed('selected', false);
+  d3.selectAll('.link').classed('selected', false);
+  d3.selectAll('.link').filter(d => d.id === link.id).classed('selected', true);
+  
+  openLinkEditPanel(link);
+}
+
+function clearSelection() {
+  selectedNode = null;
+  selectedLink = null;
+  d3.selectAll('.node').classed('selected', false);
+  d3.selectAll('.link').classed('selected', false);
+  closeSidePanel();
+}
+
+// ============================================================
+// CONTEXT MENUS
+// ============================================================
+function showNodeContextMenu(e, node) {
+  const menu = document.getElementById('contextMenu');
+  const isLocked = lockedNodes.has(node.id);
+  
+  let menuHtml = '';
+  
+  // Admin-only options
+  if (isAdmin) {
+    menuHtml += `
+      <div class="context-menu-item" onclick="addChildNode('${node.id}')">
+        <span class="context-menu-icon">➕</span> Add Child
+      </div>
+      <div class="context-menu-item" onclick="selectNode(nodes.find(n => n.id === '${node.id}')); hideContextMenu();">
+        <span class="context-menu-icon">✏️</span> Edit Node
+      </div>
+      <div class="context-menu-item" onclick="duplicateNode('${node.id}')">
+        <span class="context-menu-icon">📋</span> Duplicate
+      </div>
+      <div class="context-menu-divider"></div>
+      <div class="context-menu-item" onclick="toggleNodeLock('${node.id}'); hideContextMenu();">
+        <span class="context-menu-icon">${isLocked ? '🔓' : '🔒'}</span> ${isLocked ? 'Unlock Position' : 'Lock Position'}
+      </div>
+    `;
+    
+    // Add connect to parent option - available for all nodes
+    menuHtml += `
+      <div class="context-menu-divider"></div>
+      <div class="context-menu-item" onclick="event.stopPropagation(); showReconnectSubmenu('${node.id}')">
+        <span class="context-menu-icon">🔗</span> Connect to Parent...
+      </div>
+    `;
+    
+    menuHtml += `
+      <div class="context-menu-divider"></div>
+      <div class="context-menu-item danger" onclick="confirmDeleteNode('${node.id}')">
+        <span class="context-menu-icon">🗑️</span> Delete (Orphan Children)
+      </div>
+    `;
+  } else {
+    // View-only mode for non-admins
+    menuHtml = `
+      <div style="padding:10px 16px;font-size:12px;color:#666;">
+        <strong>${node.name}</strong><br>
+        Level: ${node.level}<br>
+        ${node.part_number ? `P/N: ${node.part_number}<br>` : ''}
+        ${node.status ? `Status: ${node.status}` : ''}
+      </div>
+    `;
+  }
+
+  menu.innerHTML = menuHtml;
+  
+  const x = Math.min(e.clientX, window.innerWidth - 220);
+  const y = Math.min(e.clientY, window.innerHeight - 300);
+  menu.style.left = x + 'px';
+  menu.style.top = y + 'px';
+  menu.classList.add('show');
+}
+
+function showReconnectSubmenu(nodeId) {
+  const node = nodes.find(n => n.id === nodeId);
+  
+  // Get existing parent IDs for this node
+  const existingParentIds = new Set(
+    links.filter(l => l.child_id === nodeId && !l.deleted).map(l => l.parent_id)
+  );
+  
+  // Filter: exclude self, already-connected parents, and deleted nodes
+  const potentialParents = nodes.filter(n => 
+    n.id !== nodeId && !n.deleted && !existingParentIds.has(n.id)
+  ).sort((a, b) => a.name.localeCompare(b.name));
+  
+  let html = '';
+  if (potentialParents.length === 0) {
+    html = '<div style="padding:12px 16px;font-size:12px;color:#999;">No available parents to connect to.</div>';
+  } else {
+    html = '<div style="max-height:250px;overflow-y:auto;padding:8px;">';
+    potentialParents.forEach(p => {
+      html += `<div style="padding:8px 12px;cursor:pointer;border-radius:6px;font-size:12px;transition:background 0.15s;" 
+        onmouseover="this.style.background='#e8e8e8'" 
+        onmouseout="this.style.background=''"
+        onclick="event.stopPropagation(); reconnectOrphan('${nodeId}', '${p.id}')">${p.name}${p.level ? ' <span style=&quot;color:#999;font-size:10px;&quot;>(L' + p.level + ')</span>' : ''}</div>`;
+    });
+    html += '</div>';
+  }
+  
+  const menu = document.getElementById('contextMenu');
+  menu.innerHTML = `
+    <div style="padding:8px 16px;font-size:11px;font-weight:600;color:#666;border-bottom:1px solid #eee;">
+      Connect "${node?.name}" to:
+    </div>
+    ${html}
+  `;
+}
+
+function showLinkContextMenu(e, link) {
+  const menu = document.getElementById('contextMenu');
+  
+  menu.innerHTML = `
+    <div class="context-menu-item" onclick="selectLink(links.find(l => l.id === '${link.id}')); hideContextMenu();">
+      <span class="context-menu-icon">✏️</span> Edit Fastener
+    </div>
+    <div class="context-menu-divider"></div>
+    <div class="context-menu-item danger" onclick="confirmDeleteLink('${link.id}')">
+      <span class="context-menu-icon">❌</span> Remove Link
+    </div>
+  `;
+  
+  menu.style.left = e.clientX + 'px';
+  menu.style.top = e.clientY + 'px';
+  menu.classList.add('show');
+}
+
+function hideContextMenu() {
+  document.getElementById('contextMenu').classList.remove('show');
+}
+
+// ============================================================
+// SIDE PANEL - NODE EDIT
+// ============================================================
+function openNodeEditPanel(node) {
+  const panel = document.getElementById('sidePanel');
+  const title = document.getElementById('panelTitle');
+  const content = document.getElementById('panelContent');
+  const footer = document.getElementById('panelFooter');
+  
+  title.textContent = 'Edit Node';
+  
+  content.innerHTML = `
+    <div class="form-group">
+      <label class="form-label">Name</label>
+      <input type="text" class="form-input" id="editNodeName" value="${node.name || ''}">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Part Number</label>
+      <input type="text" class="form-input" id="editNodePN" value="${node.part_number || ''}">
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Status</label>
+        <select class="form-select" id="editNodeStatus">
+          <option value="">None</option>
+          <option value="NOT_STARTED" ${node.status === 'NOT_STARTED' ? 'selected' : ''}>Not Started</option>
+          <option value="IN_PROGRESS" ${node.status === 'IN_PROGRESS' ? 'selected' : ''}>In Progress</option>
+          <option value="DONE" ${node.status === 'DONE' ? 'selected' : ''}>Done</option>
+          <option value="BLOCKED" ${node.status === 'BLOCKED' ? 'selected' : ''}>Blocked</option>
+          <option value="ON_HOLD" ${node.status === 'ON_HOLD' ? 'selected' : ''}>On Hold</option>
+          <option value="REVIEW" ${node.status === 'REVIEW' ? 'selected' : ''}>Review</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Qty</label>
+        <input type="number" class="form-input" id="editNodeQty" value="${node.qty || 1}" min="1">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Group</label>
+        <input type="number" class="form-input" id="editNodeGroup" value="${node.group_num || ''}" min="0">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Sequence</label>
+        <input type="number" class="form-input" id="editNodeSeq" value="${node.sequence_num || ''}" min="0">
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Notes</label>
+      <textarea class="form-textarea" id="editNodeNotes">${node.notes || ''}</textarea>
+    </div>
+  `;
+  
+  footer.innerHTML = `
+    <button class="btn btn-primary" onclick="saveNodeEdit('${node.id}')">Save</button>
+    <button class="btn btn-secondary" onclick="closeSidePanel()">Cancel</button>
+  `;
+  
+  panel.classList.add('open');
+}
+
+async function saveNodeEdit(nodeId) {
+  const updates = {
+    name: document.getElementById('editNodeName').value,
+    part_number: document.getElementById('editNodePN').value || null,
+    status: document.getElementById('editNodeStatus').value || null,
+    qty: parseInt(document.getElementById('editNodeQty').value) || 1,
+    group_num: document.getElementById('editNodeGroup').value ? parseInt(document.getElementById('editNodeGroup').value) : null,
+    sequence_num: document.getElementById('editNodeSeq').value ? parseInt(document.getElementById('editNodeSeq').value) : null,
+    notes: document.getElementById('editNodeNotes').value || null,
+    updated_at: new Date().toISOString()
+  };
+  
+  const { error } = await db
+    .from('logi_nodes')
+    .update(updates)
+    .eq('id', nodeId);
+  
+  if (error) {
+    showToast('Failed to save changes', 'error');
+    console.error(error);
+    return;
+  }
+  
+  // Update local data
+  const node = nodes.find(n => n.id === nodeId);
+  if (node) {
+    Object.assign(node, updates);
+    node.width = calculateNodeWidth(updates.name, updates.part_number);
+    node.height = calculateNodeHeight(updates.name, updates.part_number);
+  }
+  
+  showToast('Node updated', 'success');
+  closeSidePanel();
+  renderGraph();
+}
+
+// ============================================================
+// SIDE PANEL - LINK EDIT
+// ============================================================
+function openLinkEditPanel(link) {
+  const panel = document.getElementById('sidePanel');
+  const title = document.getElementById('panelTitle');
+  const content = document.getElementById('panelContent');
+  const footer = document.getElementById('panelFooter');
+  
+  const childNode = nodes.find(n => n.id === link.child_id);
+  const parentNode = nodes.find(n => n.id === link.parent_id);
+  
+  title.textContent = 'Edit Link';
+  
+  content.innerHTML = `
+    <div class="form-group">
+      <label class="form-label">Connection</label>
+      <div style="padding: 10px; background: #f5f5f5; border-radius: 6px; font-size: 12px;">
+        <strong>${childNode?.name || 'Unknown'}</strong><br>
+        <span style="color: #666;">→</span><br>
+        <strong>${parentNode?.name || 'Unknown'}</strong>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Fastener</label>
+      <input type="text" class="form-input" id="editLinkFastener" value="${link.fastener || ''}" placeholder="e.g., CBE6-20">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Fastener Qty</label>
+      <input type="number" class="form-input" id="editLinkFastenerQty" value="${link.fastener_qty || ''}" min="1" placeholder="e.g., 4">
+    </div>
+  `;
+  
+  footer.innerHTML = `
+    <button class="btn btn-primary" onclick="saveLinkEdit('${link.id}')">Save</button>
+    <button class="btn btn-secondary" onclick="closeSidePanel()">Cancel</button>
+  `;
+  
+  panel.classList.add('open');
+}
+
+async function saveLinkEdit(linkId) {
+  const updates = {
+    fastener: document.getElementById('editLinkFastener').value || null,
+    fastener_qty: document.getElementById('editLinkFastenerQty').value ? parseInt(document.getElementById('editLinkFastenerQty').value) : null,
+    updated_at: new Date().toISOString()
+  };
+  
+  const { error } = await db
+    .from('logi_links')
+    .update(updates)
+    .eq('id', linkId);
+  
+  if (error) {
+    showToast('Failed to save changes', 'error');
+    console.error(error);
+    return;
+  }
+  
+  // Update local data
+  const link = links.find(l => l.id === linkId);
+  if (link) {
+    Object.assign(link, updates);
+  }
+  
+  showToast('Link updated', 'success');
+  closeSidePanel();
+  renderGraph();
+}
+
+function closeSidePanel() {
+  document.getElementById('sidePanel').classList.remove('open');
+}
+
+// ============================================================
+// ADD/DELETE OPERATIONS
+// ============================================================
+async function addChildNode(parentId) {
+  hideContextMenu();
+  
+  // Save current positions before making changes
+  savePositionSnapshot();
+  
+  const parentNode = nodes.find(n => n.id === parentId);
+  const newName = prompt('Enter name for new node:', 'New Node');
+  if (!newName) return;
+  
+  // Create node with position near parent
+  const { data: newNode, error: nodeError } = await db
+    .from('logi_nodes')
+    .insert({
+      assembly_id: currentAssemblyId,
+      name: newName,
+      status: 'NOT_STARTED',
+      x: parentNode.x - 150,
+      y: parentNode.y + (Math.random() - 0.5) * 100
+    })
+    .select()
+    .single();
+  
+  if (nodeError) {
+    showToast('Failed to create node', 'error');
+    console.error(nodeError);
+    return;
+  }
+  
+  // Create link
+  const { error: linkError } = await db
+    .from('logi_links')
+    .insert({
+      assembly_id: currentAssemblyId,
+      child_id: newNode.id,
+      parent_id: parentId
+    });
+  
+  if (linkError) {
+    showToast('Failed to create link', 'error');
+    console.error(linkError);
+    return;
+  }
+  
+  showToast('Node created', 'success');
+  
+  // Reload but preserve locked node positions
+  await loadAssemblyDataPreservingLocked();
+}
+
+async function reconnectOrphan(childId, newParentId) {
+  hideContextMenu();
+  
+  // Create new link
+  const { error: linkError } = await db
+    .from('logi_links')
+    .insert({
+      assembly_id: currentAssemblyId,
+      child_id: childId,
+      parent_id: newParentId
+    });
+  
+  if (linkError) {
+    showToast('Failed to create link', 'error');
+    console.error(linkError);
+    return;
+  }
+  
+  // If node was an orphan, mark as no longer orphan
+  const node = nodes.find(n => n.id === childId);
+  if (node && node.is_orphan) {
+    const { error: nodeError } = await db
+      .from('logi_nodes')
+      .update({ is_orphan: false, updated_at: new Date().toISOString() })
+      .eq('id', childId);
+    
+    if (nodeError) {
+      console.error('Failed to update orphan status:', nodeError);
+    }
+  }
+  
+  const parentNode = nodes.find(n => n.id === newParentId);
+  showToast(`Connected to ${parentNode?.name || 'parent'}!`, 'success');
+  await loadAssemblyData(currentAssemblyId);
+}
+
+function confirmDeleteNode(nodeId) {
+  hideContextMenu();
+  
+  const node = nodes.find(n => n.id === nodeId);
+  showModal(
+    'Delete Node',
+    `Are you sure you want to delete "<strong>${node?.name}</strong>"?<br><br>Children will become orphans and can be reconnected later.`,
+    [
+      { label: 'Cancel', class: 'btn-secondary', action: hideModal },
+      { label: 'Delete', class: 'btn-danger', action: () => deleteNode(nodeId) }
+    ]
+  );
+}
+
+async function deleteNode(nodeId) {
+  hideModal();
+  
+  const node = nodes.find(n => n.id === nodeId);
+  if (!node) return;
+  
+  try {
+    // Soft delete the node
+    const { error: nodeError } = await db
+      .from('logi_nodes')
+      .update({ deleted: true, updated_at: new Date().toISOString() })
+      .eq('id', nodeId);
+    
+    if (nodeError) throw nodeError;
+    
+    // Soft delete links where this node is parent
+    await db
+      .from('logi_links')
+      .update({ deleted: true, updated_at: new Date().toISOString() })
+      .eq('parent_id', nodeId);
+    
+    // Soft delete links where this node is child
+    await db
+      .from('logi_links')
+      .update({ deleted: true, updated_at: new Date().toISOString() })
+      .eq('child_id', nodeId);
+    
+    // Mark children as orphans
+    for (const childId of node.receivesFrom) {
+      // Check if child has other non-deleted parents
+      const otherParents = links.filter(l => 
+        l.child_id === childId && 
+        l.parent_id !== nodeId && 
+        !l.deleted
+      );
+      
+      if (otherParents.length === 0) {
+        await db
+          .from('logi_nodes')
+          .update({ is_orphan: true, updated_at: new Date().toISOString() })
+          .eq('id', childId);
+      }
+    }
+    
+    showToast('Node deleted', 'success');
+    await loadAssemblyData(currentAssemblyId);
+  } catch (error) {
+    showToast('Failed to delete node', 'error');
+    console.error(error);
+  }
+}
+
+function confirmDeleteLink(linkId) {
+  hideContextMenu();
+  
+  showModal(
+    'Remove Link',
+    'Are you sure you want to remove this link?<br><br>The child node will become an orphan.',
+    [
+      { label: 'Cancel', class: 'btn-secondary', action: hideModal },
+      { label: 'Remove', class: 'btn-danger', action: () => deleteLink(linkId) }
+    ]
+  );
+}
+
+async function deleteLink(linkId) {
+  hideModal();
+  
+  // Get the link to mark child as orphan
+  const link = links.find(l => l.id === linkId);
+  
+  // Soft delete the link
+  const { error: linkError } = await db
+    .from('logi_links')
+    .update({ deleted: true, updated_at: new Date().toISOString() })
+    .eq('id', linkId);
+  
+  if (linkError) {
+    showToast('Failed to remove link', 'error');
+    console.error(linkError);
+    return;
+  }
+  
+  // Check if child has other parents
+  const otherLinks = links.filter(l => l.child_id === link.child_id && l.id !== linkId && !l.deleted);
+  
+  if (otherLinks.length === 0) {
+    // Mark as orphan
+    await db
+      .from('logi_nodes')
+      .update({ is_orphan: true, updated_at: new Date().toISOString() })
+      .eq('id', link.child_id);
+  }
+  
+  showToast('Link removed', 'success');
+  await loadAssemblyData(currentAssemblyId);
+}
+
+async function duplicateNode(nodeId) {
+  hideContextMenu();
+  
+  const node = nodes.find(n => n.id === nodeId);
+  if (!node) return;
+  
+  // Create copy
+  const { data: newNode, error } = await db
+    .from('logi_nodes')
+    .insert({
+      assembly_id: currentAssemblyId,
+      name: node.name + ' (copy)',
+      part_number: node.part_number,
+      status: node.status,
+      group_num: node.group_num,
+      qty: node.qty,
+      notes: node.notes,
+      x: node.x + 50,
+      y: node.y + 50
+    })
+    .select()
+    .single();
+  
+  if (error) {
+    showToast('Failed to duplicate node', 'error');
+    console.error(error);
+    return;
+  }
+  
+  // Copy links (same parents)
+  for (const targetId of node.goesInto) {
+    const link = links.find(l => l.child_id === nodeId && l.parent_id === targetId);
+    if (link) {
+      await db
+        .from('logi_links')
+        .insert({
+          assembly_id: currentAssemblyId,
+          child_id: newNode.id,
+          parent_id: targetId,
+          fastener: link.fastener,
+          fastener_qty: link.fastener_qty
+        });
+    }
+  }
+  
+  showToast('Node duplicated', 'success');
+  await loadAssemblyData(currentAssemblyId);
+}
+
+// ============================================================
+// SAVE POSITIONS
+// ============================================================
+async function saveAllPositions() {
+  setStatus('Saving positions...', 'loading');
+  
+  let savedCount = 0;
+  let lockedCount = 0;
+  
+  // Update positions and locked status for all nodes
+  for (const n of nodes) {
+    const isLocked = lockedNodes.has(n.id);
+    if (isLocked) lockedCount++;
+    
+    await db
+      .from('logi_nodes')
+      .update({ 
+        x: Math.round(n.x), 
+        y: Math.round(n.y), 
+        is_locked: isLocked,
+        updated_at: new Date().toISOString() 
+      })
+      .eq('id', n.id);
+    
+    savedCount++;
+  }
+  
+  showToast(`Saved ${savedCount} positions (${lockedCount} locked)`, 'success');
+  setStatus('');
+}
+
+// ============================================================
+// MODAL
+// ============================================================
+let pendingModalAction = null; // Store the action to execute
+
+function showModal(title, body, buttons) {
+  document.getElementById('modalTitle').textContent = title;
+  document.getElementById('modalBody').innerHTML = body;
+  
+  // Create buttons with data-action attribute
+  document.getElementById('modalFooter').innerHTML = buttons.map((b, index) => 
+    `<button class="btn ${b.class}" data-action="${index}">${b.label}</button>`
+  ).join('');
+  
+  // Store actions and add click handlers
+  const footer = document.getElementById('modalFooter');
+  buttons.forEach((b, index) => {
+    const btn = footer.querySelector(`[data-action="${index}"]`);
+    if (btn) {
+      btn.addEventListener('click', () => {
+        if (typeof b.action === 'function') {
+          b.action();
+        }
+      });
+    }
+  });
+  
+  document.getElementById('modalOverlay').classList.add('show');
+}
+
+function hideModal() {
+  document.getElementById('modalOverlay').classList.remove('show');
+}
+
+// ============================================================
+// OTHER ACTIONS
+// ============================================================
+function toggleCollapse(nodeId) {
+  if (collapsedNodes.has(nodeId)) {
+    collapsedNodes.delete(nodeId);
+  } else {
+    collapsedNodes.add(nodeId);
+  }
+  renderGraph();
+}
+
+async function refreshData() {
+  if (currentAssemblyId) {
+    await loadAssemblyData(currentAssemblyId);
+  }
+}
+
+function expandAll() {
+  collapsedNodes.clear();
+  renderGraph();
+}
+
+function collapseAll() {
+  nodes.forEach(n => {
+    if (n.receivesFrom.length > 0) {
+      collapsedNodes.add(n.id);
+    }
+  });
+  renderGraph();
+}
+
+// ============================================================
+// EXPORT
+// ============================================================
+function downloadPNG() {
+  toggleExportDropdown();
+  
+  const svg = document.getElementById('treeSvg');
+  if (!svg) return;
+  
+  const width = parseInt(svg.getAttribute('width'));
+  const height = parseInt(svg.getAttribute('height'));
+  
+  const svgClone = svg.cloneNode(true);
+  
+  // Add styles
+  const styleElement = document.createElementNS('http://www.w3.org/2000/svg', 'style');
+  styleElement.textContent = `
+    .link { fill: none !important; }
+    .link-label-bg { fill: white; opacity: 0.95; }
+    .link-label { font-size: 8px; font-weight: 600; }
+    .sequence-badge { fill: #e74c3c; font-size: 11px; font-weight: bold; }
+    .node-label { font-weight: 500; }
+    .node-pn { fill: #666; font-style: italic; font-size: 7px; }
+    text { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+  `;
+  svgClone.insertBefore(styleElement, svgClone.firstChild);
+  
+  // Add white background
+  const bg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+  bg.setAttribute('width', width);
+  bg.setAttribute('height', height);
+  bg.setAttribute('fill', 'white');
+  svgClone.insertBefore(bg, svgClone.firstChild);
+  
+  svgClone.querySelectorAll('.link').forEach(link => link.setAttribute('fill', 'none'));
+  
+  const svgData = new XMLSerializer().serializeToString(svgClone);
+  const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
+  const url = URL.createObjectURL(svgBlob);
+  
+  const canvas = document.createElement('canvas');
+  const scale = 2;
+  canvas.width = width * scale;
+  canvas.height = height * scale;
+  
+  const ctx = canvas.getContext('2d');
+  ctx.scale(scale, scale);
+  ctx.fillStyle = 'white';
+  ctx.fillRect(0, 0, width, height);
+  
+  const img = new Image();
+  img.onload = function() {
+    ctx.drawImage(img, 0, 0, width, height);
+    URL.revokeObjectURL(url);
+    
+    const pngUrl = canvas.toDataURL('image/png');
+    const a = document.createElement('a');
+    a.href = pngUrl;
+    a.download = (currentAssemblyName || 'assembly').replace(/\s+/g, '_') + '.png';
+    a.click();
+    
+    showToast('PNG downloaded', 'success');
+  };
+  img.src = url;
+}
+
+function downloadSVG() {
+  toggleExportDropdown();
+  
+  const svg = document.getElementById('treeSvg');
+  if (!svg) return;
+  
+  const svgClone = svg.cloneNode(true);
+  const width = svg.getAttribute('width');
+  const height = svg.getAttribute('height');
+  
+  // Add white background
+  const bg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+  bg.setAttribute('width', width);
+  bg.setAttribute('height', height);
+  bg.setAttribute('fill', 'white');
+  svgClone.insertBefore(bg, svgClone.firstChild);
+  
+  // Add styles
+  const styleElement = document.createElementNS('http://www.w3.org/2000/svg', 'style');
+  styleElement.textContent = `
+    .link { fill: none !important; }
+    .link-label-bg { fill: white; opacity: 0.95; }
+    .link-label { font-size: 8px; font-weight: 600; }
+    .sequence-badge { fill: #e74c3c; font-size: 11px; font-weight: bold; }
+    .node-label { font-weight: 500; }
+    .node-pn { fill: #666; font-style: italic; font-size: 7px; }
+    text { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+  `;
+  svgClone.insertBefore(styleElement, bg.nextSibling);
+  
+  svgClone.querySelectorAll('.link').forEach(link => link.setAttribute('fill', 'none'));
+  
+  const svgData = '<?xml version="1.0" encoding="UTF-8"?>\n' + 
+    new XMLSerializer().serializeToString(svgClone);
+  
+  const blob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = (currentAssemblyName || 'assembly').replace(/\s+/g, '_') + '.svg';
+  a.click();
+  URL.revokeObjectURL(url);
+  
+  showToast('SVG downloaded', 'success');
+}
+
+// ============================================================
+// EVENT LISTENERS
+// ============================================================
+function setupEventListeners() {
+  // Assembly select
+  document.getElementById('assemblySelect').addEventListener('change', async (e) => {
+    if (e.target.value) {
+      currentAssemblyId = e.target.value;
+      const assembly = assemblies.find(a => a.id === currentAssemblyId);
+      currentAssemblyName = assembly?.name || '';
+      collapsedNodes.clear();
+      await loadAssemblyData(currentAssemblyId);
+    }
+  });
+  
+  // Level filter
+  document.getElementById('levelFilter').addEventListener('change', (e) => {
+    currentLevelFilter = e.target.value;
+    renderGraph();
+  });
+  
+  // Color mode
+  document.getElementById('colorMode').addEventListener('change', (e) => {
+    currentColorMode = e.target.value;
+    renderGraph();
+  });
+  
+  // Layout mode
+  document.getElementById('layoutMode').addEventListener('change', (e) => {
+    currentLayoutMode = e.target.value;
+    // Reset positions for radial layout to apply fresh positioning (only unlocked nodes)
+    if (currentLayoutMode === 'radial') {
+      nodes.forEach(n => {
+        if (n.level >= 3 && !lockedNodes.has(n.id)) {
+          n.x = null;
+          n.y = null;
+          n.fx = null;
+          n.fy = null;
+        }
+      });
+    }
+    renderGraph();
+  });
+  
+  // Click outside to close menus
+  document.addEventListener('click', (e) => {
+    if (!e.target.matches('.dropdown-btn')) {
+      document.querySelectorAll('.dropdown-content').forEach(d => d.classList.remove('show'));
+    }
+    // Only hide context menu if clicked element is still in DOM
+    // (prevents closing when innerHTML is replaced in submenu transitions)
+    if (e.target.isConnected && !e.target.closest('.context-menu') && !e.target.closest('.node') && !e.target.closest('.link')) {
+      hideContextMenu();
+    }
+  });
+  
+  // Click on SVG to clear selection
+  document.getElementById('treeSvg').addEventListener('click', (e) => {
+    if (e.target.tagName === 'svg' || e.target.closest('.main') === e.target) {
+      clearSelection();
+    }
+  });
+  
+  // Shift key tracking
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Shift') shiftKeyPressed = true;
+  });
+  
+  document.addEventListener('keyup', (e) => {
+    if (e.key === 'Shift') {
+      shiftKeyPressed = false;
+      // Clear visual highlights when shift is released
+      d3.selectAll('.node').classed('child-highlight', false).classed('dragging-children', false);
+    }
+  });
+  
+  // Escape to close panel
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      closeSidePanel();
+      hideContextMenu();
+      hideModal();
+    }
+  });
+}
+
+// ============================================================
+// INITIALIZE
+// ============================================================
+init();
+</script>
+</body>
+</html>
