@@ -373,3 +373,5 @@ window.unlockAllNodes = unlockAllNodes;
 window.saveAllPositions = saveAllPositions;
 window.undoPositions = undoPositions;
 window.refreshUnlockedNodes = refreshUnlockedNodes;
+
+export { showAddRootNodeMenu };
