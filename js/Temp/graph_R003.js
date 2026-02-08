@@ -555,32 +555,26 @@ export function renderGraph() {
     }
   });
   
-  // Collapse indicators - positioned on RIGHT side of node
+  // Collapse indicators
   nodeElements.filter(d => d.receivesFrom.length > 0).each(function(d) {
     const group = d3.select(this);
-    const isCollapsed = state.collapsedNodes.has(d.id);
-    
-    // Circle on right edge
     group.append('circle')
       .attr('class', 'collapse-indicator')
-      .attr('cx', d.width/2 + 12)
-      .attr('cy', 0)
-      .attr('r', 8)
+      .attr('cx', -d.width/2 + 8)
+      .attr('cy', d.height/2 - 8)
+      .attr('r', 6)
       .on('click', (e) => {
         e.stopPropagation();
         toggleCollapse(d.id);
       });
     
-    // +/- text
     group.append('text')
       .attr('class', 'toggle-icon')
-      .attr('x', d.width/2 + 12)
-      .attr('y', 0)
+      .attr('x', -d.width/2 + 8)
+      .attr('y', d.height/2 - 8)
       .attr('text-anchor', 'middle')
       .attr('dy', '0.35em')
-      .attr('font-size', '12px')
-      .text(isCollapsed ? '+' : '−')
-      .style('cursor', 'pointer')
+      .text(state.collapsedNodes.has(d.id) ? '+' : '−')
       .on('click', (e) => {
         e.stopPropagation();
         toggleCollapse(d.id);

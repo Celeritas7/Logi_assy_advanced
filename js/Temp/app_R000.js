@@ -21,7 +21,6 @@ import {
 } from './nodes.js';
 import './links.js'; // Import for side effects (window exports)
 import { downloadPNG, downloadSVG } from './export.js';
-import './chatbot.js'; // Import chatbot for side effects (window exports)
 
 // ============================================================
 // INITIALIZATION
