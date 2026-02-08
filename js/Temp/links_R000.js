@@ -133,9 +133,6 @@ export function showConnectNodeMenu(childId) {
     return;
   }
   
-  // Sort by level (lower level = closer to root = more likely parent)
-  potentialParents.sort((a, b) => a.level - b.level);
-  
   const options = potentialParents.map(n => 
     `<option value="${n.id}">${escapeHtml(n.name)} (L${n.level})</option>`
   ).join('');
@@ -143,19 +140,16 @@ export function showConnectNodeMenu(childId) {
   showModal(
     'Connect to Parent',
     `<p style="margin-bottom:15px;color:#666;font-size:13px;">
-      Connect "<strong>${escapeHtml(childNode.name)}</strong>" (L${childNode.level}) to a parent:
+      Connect "<strong>${escapeHtml(childNode.name)}</strong>" to:
     </p>
     <div class="form-group">
-      <label class="form-label">Select Parent Node</label>
-      <select class="form-select" id="connectParentId" style="max-height:200px;">${options}</select>
+      <label class="form-label">Parent Node</label>
+      <select class="form-select" id="connectParentId">${options}</select>
     </div>
     <div class="form-group">
       <label class="form-label">Fastener (optional)</label>
-      <input type="text" class="form-input" id="connectFastener" placeholder="e.g., M6x20, CBST 8-30">
-    </div>
-    <p style="margin-top:10px;color:#888;font-size:11px;">
-      💡 Tip: Parent should be a lower level (closer to L1) than this node.
-    </p>`,
+      <input type="text" class="form-input" id="connectFastener" placeholder="e.g., M6x20">
+    </div>`,
     [
       { label: 'Cancel', class: 'btn-secondary', action: hideModal },
       { label: 'Connect', class: 'btn-primary', action: () => createConnection(childId) }

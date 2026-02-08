@@ -806,11 +806,6 @@ export function collapseAll() {
 function showNodeContextMenu(x, y, node) {
   const menu = document.getElementById('contextMenu');
   
-  // Check if node is an orphan or can be connected to more parents
-  const canConnect = state.nodes.some(n => 
-    n.id !== node.id && !node.goesInto.includes(n.id)
-  );
-  
   menu.innerHTML = `
     <div class="context-menu-item" onclick="window.openNodeEditPanel('${node.id}')">
       <span class="context-menu-icon">✏️</span> Edit Node
@@ -818,11 +813,6 @@ function showNodeContextMenu(x, y, node) {
     <div class="context-menu-item" onclick="window.addChildNode('${node.id}')">
       <span class="context-menu-icon">➕</span> Add Child
     </div>
-    ${canConnect ? `
-    <div class="context-menu-item" onclick="window.showConnectNodeMenu('${node.id}')">
-      <span class="context-menu-icon">🔗</span> Connect to Parent
-    </div>
-    ` : ''}
     <div class="context-menu-divider"></div>
     <div class="context-menu-item" onclick="window.toggleNodeLock('${node.id}')">
       <span class="context-menu-icon">${state.lockedNodes.has(node.id) ? '🔓' : '🔒'}</span> 
