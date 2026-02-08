@@ -28,9 +28,9 @@ export const LEVEL_COLORS = [
 
 // Level Shapes
 export const LEVEL_SHAPES = [
-  "stadium",           // L1: Stadium (Final Product)
-  "octagon",           // L2: Octagon
-  "hexagon",           // L3: Hexagon
+  "octagon",           // L1: Octagon
+  "hexagon",           // L2: Hexagon
+  "stadium",           // L3: Stadium (Final Product)
   "pentagon",          // L4: Pentagon
   "diamond",           // L5: Diamond
   "rounded_rectangle", // L6: Rounded Rectangle

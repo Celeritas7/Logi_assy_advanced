@@ -244,67 +244,6 @@ function isNodeVisible(node) {
 }
 
 // ============================================================
-// CALCULATE CURVED LINK PATH (Bezier curves)
-// ============================================================
-function calculateLinkPath(source, target) {
-  const sourceW = source.width / 2;
-  const sourceH = source.height / 2;
-  const targetW = target.width / 2;
-  const targetH = target.height / 2;
-  
-  const dx = target.x - source.x;
-  const dy = target.y - source.y;
-  
-  let sx, sy, tx, ty;
-  
-  // Determine start point on source node
-  if (dx >= 0) {
-    sx = source.x + sourceW;
-    const ratio = Math.abs(dy) / Math.max(Math.abs(dx), 1);
-    sy = source.y + (dy > 0 ? 1 : -1) * Math.min(sourceH * 0.8, sourceH * ratio);
-  } else {
-    sx = source.x - sourceW;
-    const ratio = Math.abs(dy) / Math.max(Math.abs(dx), 1);
-    sy = source.y + (dy > 0 ? 1 : -1) * Math.min(sourceH * 0.8, sourceH * ratio);
-  }
-  
-  // Determine end point on target node
-  if (dx >= 0) {
-    tx = target.x - targetW;
-    const ratio = Math.abs(dy) / Math.max(Math.abs(dx), 1);
-    ty = target.y - (dy > 0 ? 1 : -1) * Math.min(targetH * 0.8, targetH * ratio);
-  } else {
-    tx = target.x + targetW;
-    const ratio = Math.abs(dy) / Math.max(Math.abs(dx), 1);
-    ty = target.y - (dy > 0 ? 1 : -1) * Math.min(targetH * 0.8, targetH * ratio);
-  }
-  
-  // If mostly vertical, connect from top/bottom
-  if (Math.abs(dy) > Math.abs(dx) * 2) {
-    if (dy > 0) {
-      sy = source.y + sourceH;
-      ty = target.y - targetH;
-    } else {
-      sy = source.y - sourceH;
-      ty = target.y + targetH;
-    }
-  }
-  
-  // Calculate control points for Bezier curve
-  const midX = (sx + tx) / 2;
-  let cx1, cy1, cx2, cy2;
-  
-  if (Math.abs(dx) >= Math.abs(dy)) {
-    cx1 = midX; cy1 = sy; cx2 = midX; cy2 = ty;
-  } else {
-    cx1 = sx + (tx - sx) * 0.3; cy1 = sy + (ty - sy) * 0.5;
-    cx2 = sx + (tx - sx) * 0.7; cy2 = sy + (ty - sy) * 0.5;
-  }
-  
-  return `M ${sx},${sy} C ${cx1},${cy1} ${cx2},${cy2} ${tx},${ty}`;
-}
-
-// ============================================================
 // DRAW SHAPE
 // ============================================================
 function drawShape(selection, shapeType, width, height, fill, stroke, isMultiParent, isOrphan) {
@@ -448,7 +387,7 @@ export function renderGraph() {
   // Main group
   const g = svg.append('g');
   
-  // Render links with curved paths
+  // Render links
   const linkGroups = g.selectAll('.link-group')
     .data(visibleLinks, d => `${d.child_id}-${d.parent_id}`)
     .enter()
@@ -462,16 +401,28 @@ export function renderGraph() {
     
     if (!source || !target) return;
     
+    const x1 = source.x || 0, y1 = source.y || 0;
+    const x2 = target.x || 0, y2 = target.y || 0;
+    
+    // Calculate edge points
+    const dx = x2 - x1, dy = y2 - y1;
+    const dist = Math.sqrt(dx*dx + dy*dy) || 1;
+    const ux = dx/dist, uy = dy/dist;
+    
+    const startX = x1 + ux * (source.width/2 + 5);
+    const startY = y1 + uy * (source.height/2 + 5);
+    const endX = x2 - ux * (target.width/2 + 12);
+    const endY = y2 - uy * (target.height/2 + 12);
+    
     // Get color
     const fastenerColor = getFastenerColor(linkData.fastener);
     
-    // Draw curved link path using Bezier curves
+    // Draw link path
     group.append('path')
       .attr('class', 'link')
-      .attr('d', calculateLinkPath(source, target))
+      .attr('d', `M${startX},${startY} L${endX},${endY}`)
       .attr('stroke', fastenerColor)
-      .attr('stroke-width', 1.5)
-      .attr('fill', 'none')
+      .attr('stroke-width', 2)
       .attr('marker-end', 'url(#arrowhead)')
       .on('contextmenu', (e) => {
         if (!state.isAdmin) return;
@@ -479,12 +430,12 @@ export function renderGraph() {
         showLinkContextMenu(e.clientX, e.clientY, linkData);
       });
     
-    // Fastener label at midpoint
+    // Fastener label
     if (linkData.fastener) {
-      const midX = (source.x + target.x) / 2;
-      const midY = (source.y + target.y) / 2;
+      const midX = (startX + endX) / 2;
+      const midY = (startY + endY) / 2;
       
-      const labelText = linkData.fastener + (linkData.qty > 1 ? ` ×${linkData.qty}` : '');
+      const labelText = linkData.fastener + (linkData.qty > 1 ? ` (${linkData.qty})` : '');
       
       group.append('rect')
         .attr('class', 'link-label-bg')
@@ -637,12 +588,6 @@ function setupNodeInteractions(nodeElements) {
 function dragStarted(event, d) {
   if (!state.isAdmin) return;
   
-  // Locked nodes can only be moved with Shift key
-  if (state.lockedNodes.has(d.id) && !state.shiftKeyPressed) {
-    showToast('Node is locked. Use Shift+Drag to move.', 'warning');
-    return;
-  }
-  
   // Save position for undo
   const nodesToSave = state.shiftKeyPressed ? getNodeWithChildren(d.id) : [d];
   state.pushPositionHistory({
@@ -661,14 +606,11 @@ function dragStarted(event, d) {
 function dragged(event, d) {
   if (!state.isAdmin) return;
   
-  // Locked nodes can only be moved with Shift key
-  if (state.lockedNodes.has(d.id) && !state.shiftKeyPressed) return;
-  
   const dx = event.x - d.fx;
   const dy = event.y - d.fy;
   
   if (state.shiftKeyPressed) {
-    // Move with children (including locked ones when Shift is held)
+    // Move with children
     const nodesToMove = getNodeWithChildren(d.id);
     nodesToMove.forEach(n => {
       n.x += dx;
@@ -688,9 +630,6 @@ function dragged(event, d) {
 
 function dragEnded(event, d) {
   if (!state.isAdmin) return;
-  
-  // Locked nodes can only be moved with Shift key
-  if (state.lockedNodes.has(d.id) && !state.shiftKeyPressed) return;
   
   if (state.simulation) {
     state.simulation.alphaTarget(0);
@@ -745,27 +684,33 @@ function setupForceSimulation(visibleNodes, visibleLinks) {
       d3.selectAll('.node')
         .attr('transform', d => `translate(${d.x}, ${d.y})`);
       
-      // Update links with curved paths
+      // Update links
       d3.selectAll('.link-group').each(function(linkData) {
         const source = visibleNodes.find(n => n.id === linkData.child_id);
         const target = visibleNodes.find(n => n.id === linkData.parent_id);
         if (!source || !target) return;
         
-        // Use curved Bezier path
-        d3.select(this).select('.link')
-          .attr('d', calculateLinkPath(source, target));
+        const x1 = source.x, y1 = source.y;
+        const x2 = target.x, y2 = target.y;
+        const dx = x2 - x1, dy = y2 - y1;
+        const dist = Math.sqrt(dx*dx + dy*dy) || 1;
+        const ux = dx/dist, uy = dy/dist;
         
-        // Update label position at midpoint
-        const midX = (source.x + target.x) / 2;
-        const midY = (source.y + target.y) / 2;
+        const startX = x1 + ux * (source.width/2 + 5);
+        const startY = y1 + uy * (source.height/2 + 5);
+        const endX = x2 - ux * (target.width/2 + 12);
+        const endY = y2 - uy * (target.height/2 + 12);
+        
+        d3.select(this).select('.link')
+          .attr('d', `M${startX},${startY} L${endX},${endY}`);
         
         d3.select(this).select('.link-label-bg')
-          .attr('x', midX - 25)
-          .attr('y', midY - 8);
+          .attr('x', (startX + endX) / 2 - 25)
+          .attr('y', (startY + endY) / 2 - 8);
         
         d3.select(this).select('.link-label')
-          .attr('x', midX)
-          .attr('y', midY + 3);
+          .attr('x', (startX + endX) / 2)
+          .attr('y', (startY + endY) / 2 + 3);
       });
     });
   
