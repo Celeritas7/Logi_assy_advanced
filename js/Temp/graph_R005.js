@@ -338,41 +338,13 @@ function calculateLinkPath(source, target) {
 }
 
 // ============================================================
-// DARKEN COLOR - Create darker border from fill color
-// ============================================================
-function darkenColor(hex, percent = 30) {
-  // Remove # if present
-  hex = hex.replace('#', '');
-  
-  // Parse RGB
-  let r = parseInt(hex.substring(0, 2), 16);
-  let g = parseInt(hex.substring(2, 4), 16);
-  let b = parseInt(hex.substring(4, 6), 16);
-  
-  // Darken
-  r = Math.max(0, Math.floor(r * (100 - percent) / 100));
-  g = Math.max(0, Math.floor(g * (100 - percent) / 100));
-  b = Math.max(0, Math.floor(b * (100 - percent) / 100));
-  
-  // Convert back to hex
-  return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
-}
-
-// ============================================================
-// DRAW SHAPE - v28 with matching border colors
+// DRAW SHAPE - v28 with thinner borders
 // ============================================================
 function drawShape(selection, shapeType, width, height, fill, stroke, isMultiParent, isOrphan) {
   const halfW = width / 2, halfH = height / 2;
-  const strokeWidth = (isMultiParent || isOrphan) ? 2 : 1.5;
+  const strokeWidth = (isMultiParent || isOrphan) ? 2 : 1.5;  // v28: thinner borders
   const dashArray = isOrphan ? '5,3' : 'none';
-  
-  // v28: Border color matches fill (darker variant) instead of uniform gray
-  let finalStroke;
-  if (isOrphan) {
-    finalStroke = '#9b59b6';
-  } else {
-    finalStroke = darkenColor(fill, 35);  // 35% darker than fill
-  }
+  const finalStroke = isOrphan ? '#9b59b6' : stroke;
 
   selection.selectAll('.node-shape, .multi-parent-indicator').remove();
 
@@ -439,11 +411,10 @@ function drawShape(selection, shapeType, width, height, fill, stroke, isMultiPar
   (shapes[shapeType] || shapes.rectangle)();
   
   if (isMultiParent) {
-    // Multi-parent indicator uses darker version of fill color too
     selection.insert('rect', ':first-child').attr('class', 'multi-parent-indicator')
       .attr('x', -halfW - 3).attr('y', -halfH - 3)
       .attr('width', width + 6).attr('height', height + 6)
-      .attr('stroke', darkenColor(fill, 50)).attr('stroke-width', 1.5).attr('rx', 4).attr('fill', 'none');
+      .attr('stroke', '#e74c3c').attr('stroke-width', 1.5).attr('rx', 4).attr('fill', 'none');
   }
 }
 
