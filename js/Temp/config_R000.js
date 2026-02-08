@@ -7,7 +7,7 @@ export const SUPABASE_URL = 'https://wylxvmkcrexwfpjpbhyy.supabase.co';
 export const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind5bHh2bWtjcmV4d2ZwanBiaHl5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg2MzkxMDYsImV4cCI6MjA4NDIxNTEwNn0.6Bxo42hx4jwlJGWnfjiTpiDUsYfc1QLTN3YtrU1efak';
 
 // Google Auth
-export const GOOGLE_CLIENT_ID = '960816882472-b3qjf15ehvab7mcuvf8154tveoub4sic.apps.googleusercontent.com';
+export const GOOGLE_CLIENT_ID = '691506775498-6ovmmthr0bfm0bgshvuaqhf9t7sm5gp3.apps.googleusercontent.com';
 export const ADMIN_EMAIL = 'mangaonkaraniket@gmail.com';
 
 // ============================================================
