@@ -1,5 +1,5 @@
 // ============================================================
-// Logi Assembly v27 - Graph Visualization Module
+// Logi Assembly v28 - Graph Visualization Module
 // ============================================================
 
 import { db } from './database.js';
@@ -226,7 +226,7 @@ function getNodeColor(node) {
 }
 
 // ============================================================
-// NODE VISIBILITY
+// NODE VISIBILITY - Check all ancestors for collapse
 // ============================================================
 function isNodeVisible(node) {
   if (state.currentLevelFilter !== 'all' && node.level > parseInt(state.currentLevelFilter)) {
@@ -236,15 +236,32 @@ function isNodeVisible(node) {
   // Root nodes always visible
   if (node.goesInto.length === 0) return true;
   
-  // Visible if any parent not collapsed
-  for (const targetId of node.goesInto) {
-    if (!state.collapsedNodes.has(targetId)) return true;
+  // Check if ANY ancestor is collapsed (recursive)
+  return !hasCollapsedAncestor(node.id, new Set());
+}
+
+// Helper: Recursively check if any ancestor is collapsed
+function hasCollapsedAncestor(nodeId, visited) {
+  if (visited.has(nodeId)) return false;
+  visited.add(nodeId);
+  
+  const node = state.nodes.find(n => n.id === nodeId);
+  if (!node) return false;
+  
+  // Check each parent
+  for (const parentId of node.goesInto) {
+    // If direct parent is collapsed, hide this node
+    if (state.collapsedNodes.has(parentId)) return true;
+    
+    // Recursively check if parent has collapsed ancestor
+    if (hasCollapsedAncestor(parentId, visited)) return true;
   }
+  
   return false;
 }
 
 // ============================================================
-// CALCULATE CURVED LINK PATH (Bezier curves)
+// CALCULATE SMOOTH LINK PATH (Edge-center Bezier curves)
 // ============================================================
 function calculateLinkPath(source, target) {
   const sourceW = source.width / 2;
@@ -254,62 +271,78 @@ function calculateLinkPath(source, target) {
   
   const dx = target.x - source.x;
   const dy = target.y - source.y;
+  const absDx = Math.abs(dx);
+  const absDy = Math.abs(dy);
   
   let sx, sy, tx, ty;
   
-  // Determine start point on source node
-  if (dx >= 0) {
-    sx = source.x + sourceW;
-    const ratio = Math.abs(dy) / Math.max(Math.abs(dx), 1);
-    sy = source.y + (dy > 0 ? 1 : -1) * Math.min(sourceH * 0.8, sourceH * ratio);
-  } else {
-    sx = source.x - sourceW;
-    const ratio = Math.abs(dy) / Math.max(Math.abs(dx), 1);
-    sy = source.y + (dy > 0 ? 1 : -1) * Math.min(sourceH * 0.8, sourceH * ratio);
-  }
-  
-  // Determine end point on target node
-  if (dx >= 0) {
-    tx = target.x - targetW;
-    const ratio = Math.abs(dy) / Math.max(Math.abs(dx), 1);
-    ty = target.y - (dy > 0 ? 1 : -1) * Math.min(targetH * 0.8, targetH * ratio);
-  } else {
-    tx = target.x + targetW;
-    const ratio = Math.abs(dy) / Math.max(Math.abs(dx), 1);
-    ty = target.y - (dy > 0 ? 1 : -1) * Math.min(targetH * 0.8, targetH * ratio);
-  }
-  
-  // If mostly vertical, connect from top/bottom
-  if (Math.abs(dy) > Math.abs(dx) * 2) {
-    if (dy > 0) {
-      sy = source.y + sourceH;
-      ty = target.y - targetH;
+  // Smart edge detection - connect from appropriate edge centers
+  if (absDx > absDy * 1.5) {
+    // Mostly horizontal - connect from left/right edges
+    if (dx > 0) {
+      sx = source.x + sourceW;  // Right edge of source
+      tx = target.x - targetW;  // Left edge of target
     } else {
-      sy = source.y - sourceH;
-      ty = target.y + targetH;
+      sx = source.x - sourceW;  // Left edge of source
+      tx = target.x + targetW;  // Right edge of target
     }
+    sy = source.y;  // Center vertically
+    ty = target.y;
+  } else if (absDy > absDx * 1.5) {
+    // Mostly vertical - connect from top/bottom edges
+    if (dy > 0) {
+      sy = source.y + sourceH;  // Bottom edge of source
+      ty = target.y - targetH;  // Top edge of target
+    } else {
+      sy = source.y - sourceH;  // Top edge of source
+      ty = target.y + targetH;  // Bottom edge of target
+    }
+    sx = source.x;  // Center horizontally
+    tx = target.x;
+  } else {
+    // Diagonal - use corner-ish but from edges
+    if (dx > 0) {
+      sx = source.x + sourceW;
+      tx = target.x - targetW;
+    } else {
+      sx = source.x - sourceW;
+      tx = target.x + targetW;
+    }
+    // Slight vertical offset based on direction
+    sy = source.y + (dy > 0 ? sourceH * 0.3 : -sourceH * 0.3);
+    ty = target.y + (dy > 0 ? -targetH * 0.3 : targetH * 0.3);
   }
   
-  // Calculate control points for Bezier curve
+  // Calculate smooth control points at midpoint
   const midX = (sx + tx) / 2;
+  const midY = (sy + ty) / 2;
+  
+  // Gentle curve - control points pull toward midpoint
   let cx1, cy1, cx2, cy2;
   
-  if (Math.abs(dx) >= Math.abs(dy)) {
-    cx1 = midX; cy1 = sy; cx2 = midX; cy2 = ty;
+  if (absDx > absDy) {
+    // Horizontal dominant - S-curve
+    cx1 = midX;
+    cy1 = sy;
+    cx2 = midX;
+    cy2 = ty;
   } else {
-    cx1 = sx + (tx - sx) * 0.3; cy1 = sy + (ty - sy) * 0.5;
-    cx2 = sx + (tx - sx) * 0.7; cy2 = sy + (ty - sy) * 0.5;
+    // Vertical dominant - S-curve
+    cx1 = sx;
+    cy1 = midY;
+    cx2 = tx;
+    cy2 = midY;
   }
   
   return `M ${sx},${sy} C ${cx1},${cy1} ${cx2},${cy2} ${tx},${ty}`;
 }
 
 // ============================================================
-// DRAW SHAPE
+// DRAW SHAPE - v28 with thinner borders
 // ============================================================
 function drawShape(selection, shapeType, width, height, fill, stroke, isMultiParent, isOrphan) {
   const halfW = width / 2, halfH = height / 2;
-  const strokeWidth = (isMultiParent || isOrphan) ? 3 : 2;
+  const strokeWidth = (isMultiParent || isOrphan) ? 2 : 1.5;  // v28: thinner borders
   const dashArray = isOrphan ? '5,3' : 'none';
   const finalStroke = isOrphan ? '#9b59b6' : stroke;
 
@@ -379,9 +412,9 @@ function drawShape(selection, shapeType, width, height, fill, stroke, isMultiPar
   
   if (isMultiParent) {
     selection.insert('rect', ':first-child').attr('class', 'multi-parent-indicator')
-      .attr('x', -halfW - 4).attr('y', -halfH - 4)
-      .attr('width', width + 8).attr('height', height + 8)
-      .attr('stroke', '#e74c3c').attr('stroke-width', 2).attr('rx', 4).attr('fill', 'none');
+      .attr('x', -halfW - 3).attr('y', -halfH - 3)
+      .attr('width', width + 6).attr('height', height + 6)
+      .attr('stroke', '#e74c3c').attr('stroke-width', 1.5).attr('rx', 4).attr('fill', 'none');
   }
 }
 
@@ -431,18 +464,18 @@ export function renderGraph() {
     .attr('width', width)
     .attr('height', height);
   
-  // Arrow markers
+  // Arrow markers - v28: smaller, better positioned
   const defs = svg.append('defs');
   defs.append('marker')
     .attr('id', 'arrowhead')
-    .attr('viewBox', '-0 -5 10 10')
-    .attr('refX', 8)
-    .attr('refY', 0)
+    .attr('viewBox', '0 0 10 10')
+    .attr('refX', 9)
+    .attr('refY', 5)
     .attr('orient', 'auto')
-    .attr('markerWidth', 6)
-    .attr('markerHeight', 6)
+    .attr('markerWidth', 5)
+    .attr('markerHeight', 5)
     .append('path')
-    .attr('d', 'M 0,-5 L 10,0 L 0,5')
+    .attr('d', 'M 0,1 L 8,5 L 0,9 z')
     .attr('fill', '#666');
   
   // Main group
@@ -521,6 +554,26 @@ export function renderGraph() {
     
     // Draw shape
     drawShape(group, shape, d.width, d.height, color, '#555', isMultiParent, isOrphan);
+    
+    // v28: Status indicator dot (top-left, visible to all)
+    const statusColors = {
+      'DONE': '#27ae60',
+      'IN_PROGRESS': '#f39c12',
+      'BLOCKED': '#e74c3c',
+      'NOT_STARTED': '#95a5a6',
+      'ON_HOLD': '#9b59b6',
+      'REVIEW': '#3498db'
+    };
+    const statusColor = statusColors[d.status] || '#95a5a6';
+    
+    group.append('circle')
+      .attr('class', 'status-indicator')
+      .attr('cx', -d.width/2 + 10)
+      .attr('cy', -d.height/2 + 10)
+      .attr('r', 5)
+      .attr('fill', statusColor)
+      .attr('stroke', 'white')
+      .attr('stroke-width', 1.5);
     
     // Get font styling
     const fontSize = getLevelFontSize(d.level);

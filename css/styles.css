@@ -1,5 +1,5 @@
 /* ============================================
-   Logi Assembly v27 - Styles
+   Logi Assembly v28 - Styles
    ============================================ */
 
 * {
@@ -364,20 +364,21 @@ svg { display: block; }
 }
 
 /* ============================================
-   LINKS
+   LINKS - v28: thinner, cleaner
    ============================================ */
 .link {
   fill: none !important;
   stroke-linecap: round;
   stroke-linejoin: round;
   cursor: pointer;
+  stroke-width: 1.5px;
 }
 
-.link:hover { stroke-width: 3px !important; }
+.link:hover { stroke-width: 2.5px !important; }
 
 .link.selected {
-  stroke-width: 3px !important;
-  filter: drop-shadow(0 0 4px rgba(52, 152, 219, 0.8));
+  stroke-width: 2.5px !important;
+  filter: drop-shadow(0 0 3px rgba(52, 152, 219, 0.6));
 }
 
 .link-label {
@@ -391,7 +392,11 @@ svg { display: block; }
   opacity: 0.95;
 }
 
-.status-indicator { stroke-width: 2px; }
+/* v28: Status indicator dot */
+.status-indicator { 
+  stroke-width: 1.5px;
+  pointer-events: none;
+}
 
 .collapse-indicator {
   fill: #ffffff;

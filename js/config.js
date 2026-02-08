@@ -1,5 +1,5 @@
 // ============================================================
-// Logi Assembly v27 - Configuration
+// Logi Assembly v28 - Configuration
 // ============================================================
 
 // Supabase Configuration
@@ -7,7 +7,7 @@ export const SUPABASE_URL = 'https://wylxvmkcrexwfpjpbhyy.supabase.co';
 export const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind5bHh2bWtjcmV4d2ZwanBiaHl5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg2MzkxMDYsImV4cCI6MjA4NDIxNTEwNn0.6Bxo42hx4jwlJGWnfjiTpiDUsYfc1QLTN3YtrU1efak';
 
 // Google Auth
-export const GOOGLE_CLIENT_ID = '960816882472-b3qjf15ehvab7mcuvf8154tveoub4sic.apps.googleusercontent.com';
+export const GOOGLE_CLIENT_ID = '691506775498-6ovmmthr0bfm0bgshvuaqhf9t7sm5gp3.apps.googleusercontent.com';
 export const ADMIN_EMAIL = 'mangaonkaraniket@gmail.com';
 
 // ============================================================
@@ -38,15 +38,15 @@ export const LEVEL_SHAPES = [
   "parallelogram"      // L8+: Parallelogram (Raw Parts)
 ];
 
-// Level Font Sizes (Option C: Moderate 18px → 10px)
+// Level Font Sizes (v28: Smaller, proportional 14px → 10px)
 export const LEVEL_FONT_SIZES = [
-  18, // L1
-  16, // L2
-  15, // L3
-  14, // L4
-  13, // L5
-  12, // L6
-  11, // L7
+  14, // L1
+  13, // L2
+  12, // L3
+  12, // L4
+  11, // L5
+  11, // L6
+  10, // L7
   10  // L8+
 ];
 

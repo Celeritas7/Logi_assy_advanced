@@ -1,5 +1,5 @@
 // ============================================================
-// Logi Assembly v27 - Main Application
+// Logi Assembly v28 - Main Application
 // ============================================================
 
 import { db, testConnection, updateDbIndicator } from './database.js';
