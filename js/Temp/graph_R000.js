@@ -665,15 +665,8 @@ function getNodeWithChildren(nodeId) {
 // FORCE SIMULATION
 // ============================================================
 function setupForceSimulation(visibleNodes, visibleLinks) {
-  // Transform links to D3 format (source/target instead of child_id/parent_id)
-  const d3Links = visibleLinks.map(link => ({
-    source: link.child_id,
-    target: link.parent_id,
-    ...link
-  }));
-  
   const sim = d3.forceSimulation(visibleNodes)
-    .force('link', d3.forceLink(d3Links)
+    .force('link', d3.forceLink(visibleLinks)
       .id(d => d.id)
       .distance(150)
       .strength(0.3))
