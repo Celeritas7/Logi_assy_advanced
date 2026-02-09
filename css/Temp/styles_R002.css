@@ -392,16 +392,6 @@ svg { display: block; }
   opacity: 0.95;
 }
 
-/* v28: Clickable link labels */
-.link-clickable {
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.link-clickable:hover {
-  filter: drop-shadow(0 2px 4px rgba(52, 152, 219, 0.3));
-}
-
 /* v28: Status indicator dot */
 .status-indicator { 
   stroke-width: 1.5px;

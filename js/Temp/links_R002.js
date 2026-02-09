@@ -4,11 +4,11 @@
 
 import { db } from './database.js';
 import * as state from './state.js';
-import { showToast, showModal, hideModal, hideContextMenu, escapeHtml, openSidePanel, closeSidePanel, setSidePanelContent } from './ui.js';
+import { showToast, showModal, hideModal, hideContextMenu, escapeHtml } from './ui.js';
 import { loadAssemblyData } from './graph.js';
 
 // ============================================================
-// EDIT LINK (Fastener, Loctite, Torque) - Opens in Side Panel
+// EDIT LINK (Fastener, Loctite, Torque)
 // ============================================================
 export function editLinkFastener(linkId) {
   hideContextMenu();
@@ -21,21 +21,21 @@ export function editLinkFastener(linkId) {
   const sourceNode = state.nodes.find(n => n.id === link.child_id);
   const targetNode = state.nodes.find(n => n.id === link.parent_id);
   
-  const content = `
-    <p style="margin-bottom:15px;color:#666;font-size:13px;padding:0 5px;">
-      <strong>${escapeHtml(sourceNode?.name || 'Unknown')}</strong><br>
-      ↓<br>
-      <strong>${escapeHtml(targetNode?.name || 'Unknown')}</strong>
+  showModal(
+    'Edit Link Properties',
+    `<p style="margin-bottom:15px;color:#666;font-size:13px;">
+      ${escapeHtml(sourceNode?.name || 'Unknown')} → ${escapeHtml(targetNode?.name || 'Unknown')}
     </p>
     
-    <div class="form-group">
-      <label class="form-label">Fastener Type</label>
-      <input type="text" class="form-input" id="linkFastener" value="${escapeHtml(link.fastener || '')}" placeholder="e.g., M6x20, CBE10">
-    </div>
-    
-    <div class="form-group">
-      <label class="form-label">Quantity</label>
-      <input type="number" class="form-input" id="linkQty" value="${link.qty || 1}" min="1">
+    <div class="form-row" style="display:flex;gap:10px;">
+      <div class="form-group" style="flex:2;">
+        <label class="form-label">Fastener Type</label>
+        <input type="text" class="form-input" id="linkFastener" value="${escapeHtml(link.fastener || '')}" placeholder="e.g., M6x20, CBE10">
+      </div>
+      <div class="form-group" style="flex:1;">
+        <label class="form-label">Qty</label>
+        <input type="number" class="form-input" id="linkQty" value="${link.qty || 1}" min="1">
+      </div>
     </div>
     
     <div class="form-group">
@@ -48,46 +48,60 @@ export function editLinkFastener(linkId) {
         <option value="263" ${link.loctite === '263' ? 'selected' : ''}>263 (Green - High)</option>
         <option value="271" ${link.loctite === '271' ? 'selected' : ''}>271 (Red - High Strength)</option>
         <option value="290" ${link.loctite === '290' ? 'selected' : ''}>290 (Green - Wicking)</option>
+        <option value="custom" ${link.loctite && !['222','243','262','263','271','290'].includes(link.loctite) ? 'selected' : ''}>Custom...</option>
       </select>
+      <input type="text" class="form-input" id="linkLoctiteCustom" 
+             value="${link.loctite && !['222','243','262','263','271','290'].includes(link.loctite) ? escapeHtml(link.loctite) : ''}" 
+             placeholder="Custom loctite value"
+             style="margin-top:5px;display:${link.loctite && !['222','243','262','263','271','290'].includes(link.loctite) ? 'block' : 'none'};">
     </div>
     
     <div class="form-group">
       <label class="form-label">Torque Value</label>
-      <input type="number" class="form-input" id="linkTorqueValue" value="${link.torque_value || ''}" placeholder="e.g., 25">
+      <div style="display:flex;gap:10px;">
+        <input type="number" class="form-input" id="linkTorqueValue" value="${link.torque_value || ''}" placeholder="e.g., 25" style="flex:1;">
+        <select class="form-select" id="linkTorqueUnit" style="flex:1;">
+          <option value="Nm" ${link.torque_unit === 'Nm' || !link.torque_unit ? 'selected' : ''}>Nm</option>
+          <option value="ft-lb" ${link.torque_unit === 'ft-lb' ? 'selected' : ''}>ft-lb</option>
+          <option value="in-lb" ${link.torque_unit === 'in-lb' ? 'selected' : ''}>in-lb</option>
+          <option value="kgf-cm" ${link.torque_unit === 'kgf-cm' ? 'selected' : ''}>kgf-cm</option>
+        </select>
+      </div>
     </div>
     
-    <div class="form-group">
-      <label class="form-label">Torque Unit</label>
-      <select class="form-select" id="linkTorqueUnit">
-        <option value="Nm" ${link.torque_unit === 'Nm' || !link.torque_unit ? 'selected' : ''}>Nm</option>
-        <option value="ft-lb" ${link.torque_unit === 'ft-lb' ? 'selected' : ''}>ft-lb</option>
-        <option value="in-lb" ${link.torque_unit === 'in-lb' ? 'selected' : ''}>in-lb</option>
-        <option value="kgf-cm" ${link.torque_unit === 'kgf-cm' ? 'selected' : ''}>kgf-cm</option>
-      </select>
-    </div>
+    <div style="margin-top:10px;font-size:11px;color:#888;">
+      <strong>Common fasteners:</strong> CBE, CBST, M, MS, PRESS<br>
+      <strong>Loctite:</strong> 222=Purple(Low), 243=Blue(Med), 262/271=Red(High)
+    </div>`,
+    [
+      { label: 'Cancel', class: 'btn-secondary', action: hideModal },
+      { label: 'Save', class: 'btn-primary', action: () => saveLinkProperties(linkId) }
+    ]
+  );
+  
+  // Handle loctite dropdown change
+  setTimeout(() => {
+    const loctiteSelect = document.getElementById('linkLoctite');
+    const loctiteCustom = document.getElementById('linkLoctiteCustom');
     
-    <div style="margin-top:15px;padding:10px;background:#f5f5f5;border-radius:6px;font-size:11px;color:#666;">
-      <strong>Reference:</strong><br>
-      <span style="color:#9b59b6;">●</span> 222 = Low (Purple)<br>
-      <span style="color:#3498db;">●</span> 243 = Medium (Blue)<br>
-      <span style="color:#e74c3c;">●</span> 262/271 = High (Red)
-    </div>
-  `;
-  
-  setSidePanelContent('Edit Link', content, [
-    { label: 'Cancel', class: 'btn-secondary', action: closeSidePanel },
-    { label: 'Delete Link', class: 'btn-danger', action: () => confirmDeleteLinkFromPanel(linkId) },
-    { label: 'Save', class: 'btn-primary', action: () => saveLinkProperties(linkId) }
-  ]);
-  
-  openSidePanel();
-  setTimeout(() => document.getElementById('linkFastener')?.focus(), 100);
+    loctiteSelect?.addEventListener('change', () => {
+      loctiteCustom.style.display = loctiteSelect.value === 'custom' ? 'block' : 'none';
+    });
+    
+    document.getElementById('linkFastener')?.focus();
+  }, 100);
 }
 
 async function saveLinkProperties(linkId) {
   const fastener = document.getElementById('linkFastener').value.trim();
   const qty = parseInt(document.getElementById('linkQty').value) || 1;
-  const loctite = document.getElementById('linkLoctite').value || null;
+  
+  // Get loctite value
+  const loctiteSelect = document.getElementById('linkLoctite').value;
+  const loctiteCustom = document.getElementById('linkLoctiteCustom').value.trim();
+  const loctite = loctiteSelect === 'custom' ? loctiteCustom : (loctiteSelect || null);
+  
+  // Get torque value
   const torqueValue = document.getElementById('linkTorqueValue').value.trim();
   const torqueUnit = document.getElementById('linkTorqueUnit').value;
   
@@ -95,25 +109,19 @@ async function saveLinkProperties(linkId) {
     const { error } = await db.from('logi_links').update({
       fastener: fastener || null,
       qty: qty,
-      loctite: loctite,
+      loctite: loctite || null,
       torque_value: torqueValue ? parseFloat(torqueValue) : null,
       torque_unit: torqueValue ? torqueUnit : null
     }).eq('id', linkId);
     
     if (error) throw error;
     
-    closeSidePanel();
+    hideModal();
     showToast('Link updated', 'success');
     await loadAssemblyData(state.currentAssemblyId);
   } catch (e) {
     console.error('Error updating link:', e);
     showToast('Failed to update link: ' + e.message, 'error');
-  }
-}
-
-function confirmDeleteLinkFromPanel(linkId) {
-  if (confirm('Delete this link? The nodes will remain.')) {
-    deleteLink(linkId);
   }
 }
 

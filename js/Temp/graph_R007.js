@@ -542,65 +542,47 @@ export function renderGraph() {
       });
     
     // Link label at midpoint (Fastener, Loctite, Torque)
-    // Always show a clickable area even if no label data
-    const midX = (source.x + target.x) / 2;
-    const midY = (source.y + target.y) / 2;
-    
     const hasLabel = linkData.fastener || linkData.loctite || linkData.torque_value;
     
-    // Build label lines
-    const lines = [];
-    
-    if (linkData.fastener) {
-      const fastenerText = linkData.fastener + (linkData.qty > 1 ? ` ×${linkData.qty}` : '');
-      lines.push({ text: fastenerText, color: fastenerColor, bold: true });
-    }
-    
-    if (linkData.loctite) {
-      lines.push({ text: `LT-${linkData.loctite}`, color: '#9b59b6', bold: false });
-    }
-    
-    if (linkData.torque_value) {
-      const torqueText = `${linkData.torque_value}${linkData.torque_unit || 'Nm'}`;
-      lines.push({ text: torqueText, color: '#e67e22', bold: false });
-    }
-    
-    // Calculate label dimensions
-    const lineHeight = 11;
-    const labelHeight = hasLabel ? (lines.length * lineHeight + 6) : 20;
-    const labelWidth = hasLabel ? Math.max(50, ...lines.map(l => l.text.length * 5.5 + 10)) : 30;
-    
-    // Background rect - ALWAYS clickable for easy editing
-    group.append('rect')
-      .attr('class', 'link-label-bg link-clickable')
-      .attr('x', midX - labelWidth / 2)
-      .attr('y', midY - labelHeight / 2)
-      .attr('width', labelWidth)
-      .attr('height', labelHeight)
-      .attr('rx', 3)
-      .style('cursor', state.isAdmin ? 'pointer' : 'default')
-      .style('opacity', hasLabel ? 0.95 : 0)
-      .on('click', (e) => {
-        if (!state.isAdmin) return;
-        e.stopPropagation();
-        window.editLinkFastener(linkData.id);
-      })
-      .on('contextmenu', (e) => {
-        if (!state.isAdmin) return;
-        e.preventDefault();
-        showLinkContextMenu(e.clientX, e.clientY, linkData);
-      })
-      .on('mouseover', function() {
-        if (state.isAdmin) {
-          d3.select(this).style('opacity', 1).attr('stroke', '#3498db').attr('stroke-width', 1);
-        }
-      })
-      .on('mouseout', function() {
-        d3.select(this).style('opacity', hasLabel ? 0.95 : 0).attr('stroke', 'none');
-      });
-    
-    // Render label text lines
     if (hasLabel) {
+      const midX = (source.x + target.x) / 2;
+      const midY = (source.y + target.y) / 2;
+      
+      // Build label lines
+      const lines = [];
+      
+      // Line 1: Fastener with qty
+      if (linkData.fastener) {
+        const fastenerText = linkData.fastener + (linkData.qty > 1 ? ` ×${linkData.qty}` : '');
+        lines.push({ text: fastenerText, color: fastenerColor, bold: true });
+      }
+      
+      // Line 2: Loctite
+      if (linkData.loctite) {
+        lines.push({ text: `LT-${linkData.loctite}`, color: '#9b59b6', bold: false });
+      }
+      
+      // Line 3: Torque
+      if (linkData.torque_value) {
+        const torqueText = `${linkData.torque_value}${linkData.torque_unit || 'Nm'}`;
+        lines.push({ text: torqueText, color: '#e67e22', bold: false });
+      }
+      
+      // Calculate label dimensions
+      const lineHeight = 11;
+      const labelHeight = lines.length * lineHeight + 6;
+      const labelWidth = Math.max(50, ...lines.map(l => l.text.length * 5.5 + 10));
+      
+      // Background rect
+      group.append('rect')
+        .attr('class', 'link-label-bg')
+        .attr('x', midX - labelWidth / 2)
+        .attr('y', midY - labelHeight / 2)
+        .attr('width', labelWidth)
+        .attr('height', labelHeight)
+        .attr('rx', 3);
+      
+      // Render each line
       lines.forEach((line, i) => {
         const yOffset = midY - labelHeight / 2 + 10 + (i * lineHeight);
         group.append('text')
@@ -611,7 +593,6 @@ export function renderGraph() {
           .attr('fill', line.color)
           .attr('font-weight', line.bold ? '600' : '400')
           .attr('font-size', '8px')
-          .style('pointer-events', 'none')  // Let clicks pass through to background
           .text(line.text);
       });
     }
@@ -958,10 +939,6 @@ function showNodeContextMenu(x, y, node) {
     n.id !== node.id && !node.goesInto.includes(n.id)
   );
   
-  // Get outgoing links (this node as child → parents)
-  const outgoingLinks = state.links.filter(l => l.child_id === node.id);
-  const hasOutgoingLinks = outgoingLinks.length > 0;
-  
   menu.innerHTML = `
     <div class="context-menu-item" onclick="window.openNodeEditPanel('${node.id}')">
       <span class="context-menu-icon">✏️</span> Edit Node
@@ -972,12 +949,6 @@ function showNodeContextMenu(x, y, node) {
     ${canConnect ? `
     <div class="context-menu-item" onclick="window.showConnectNodeMenu('${node.id}')">
       <span class="context-menu-icon">🔗</span> Connect to Parent
-    </div>
-    ` : ''}
-    ${hasOutgoingLinks ? `
-    <div class="context-menu-divider"></div>
-    <div class="context-menu-item" onclick="window.showNodeLinksPanel('${node.id}')">
-      <span class="context-menu-icon">🔩</span> Edit Links (${outgoingLinks.length})
     </div>
     ` : ''}
     <div class="context-menu-divider"></div>
@@ -995,59 +966,6 @@ function showNodeContextMenu(x, y, node) {
   menu.style.top = y + 'px';
   menu.classList.add('show');
 }
-
-// Show all outgoing links for a node in side panel
-function showNodeLinksPanel(nodeId) {
-  hideContextMenu();
-  
-  const node = state.nodes.find(n => n.id === nodeId);
-  if (!node) return;
-  
-  // Get all outgoing links (this node → parents)
-  const outgoingLinks = state.links.filter(l => l.child_id === nodeId);
-  
-  if (outgoingLinks.length === 0) {
-    showToast('No outgoing links', 'info');
-    return;
-  }
-  
-  let linksHtml = outgoingLinks.map(link => {
-    const parent = state.nodes.find(n => n.id === link.parent_id);
-    return `
-      <div class="link-item" style="padding:12px;border:1px solid #e0e0e0;border-radius:8px;margin-bottom:10px;cursor:pointer;transition:all 0.2s;"
-           onclick="window.editLinkFastener('${link.id}')"
-           onmouseover="this.style.background='#f5f5f5';this.style.borderColor='#3498db';"
-           onmouseout="this.style.background='white';this.style.borderColor='#e0e0e0';">
-        <div style="font-weight:600;margin-bottom:5px;">→ ${escapeHtml(parent?.name || 'Unknown')}</div>
-        <div style="font-size:12px;color:#666;">
-          ${link.fastener ? `<span style="color:#3498db;">🔩 ${escapeHtml(link.fastener)}${link.qty > 1 ? ' ×' + link.qty : ''}</span>` : '<span style="color:#999;">No fastener</span>'}
-          ${link.loctite ? `<br><span style="color:#9b59b6;">🧴 LT-${link.loctite}</span>` : ''}
-          ${link.torque_value ? `<br><span style="color:#e67e22;">🔧 ${link.torque_value}${link.torque_unit || 'Nm'}</span>` : ''}
-        </div>
-      </div>
-    `;
-  }).join('');
-  
-  const content = `
-    <p style="margin-bottom:15px;color:#666;font-size:13px;">
-      Links from <strong>${escapeHtml(node.name)}</strong> to parent nodes:
-    </p>
-    <div class="links-list">
-      ${linksHtml}
-    </div>
-    <p style="margin-top:15px;font-size:11px;color:#888;">
-      💡 Click on a link to edit its properties
-    </p>
-  `;
-  
-  setSidePanelContent(`Links (${outgoingLinks.length})`, content, [
-    { label: 'Close', class: 'btn-secondary', action: closeSidePanel }
-  ]);
-  
-  openSidePanel();
-}
-
-window.showNodeLinksPanel = showNodeLinksPanel;
 
 function showLinkContextMenu(x, y, link) {
   const menu = document.getElementById('contextMenu');
