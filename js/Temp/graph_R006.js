@@ -541,60 +541,28 @@ export function renderGraph() {
         showLinkContextMenu(e.clientX, e.clientY, linkData);
       });
     
-    // Link label at midpoint (Fastener, Loctite, Torque)
-    const hasLabel = linkData.fastener || linkData.loctite || linkData.torque_value;
-    
-    if (hasLabel) {
+    // Fastener label at midpoint
+    if (linkData.fastener) {
       const midX = (source.x + target.x) / 2;
       const midY = (source.y + target.y) / 2;
       
-      // Build label lines
-      const lines = [];
+      const labelText = linkData.fastener + (linkData.qty > 1 ? ` ×${linkData.qty}` : '');
       
-      // Line 1: Fastener with qty
-      if (linkData.fastener) {
-        const fastenerText = linkData.fastener + (linkData.qty > 1 ? ` ×${linkData.qty}` : '');
-        lines.push({ text: fastenerText, color: fastenerColor, bold: true });
-      }
-      
-      // Line 2: Loctite
-      if (linkData.loctite) {
-        lines.push({ text: `LT-${linkData.loctite}`, color: '#9b59b6', bold: false });
-      }
-      
-      // Line 3: Torque
-      if (linkData.torque_value) {
-        const torqueText = `${linkData.torque_value}${linkData.torque_unit || 'Nm'}`;
-        lines.push({ text: torqueText, color: '#e67e22', bold: false });
-      }
-      
-      // Calculate label dimensions
-      const lineHeight = 11;
-      const labelHeight = lines.length * lineHeight + 6;
-      const labelWidth = Math.max(50, ...lines.map(l => l.text.length * 5.5 + 10));
-      
-      // Background rect
       group.append('rect')
         .attr('class', 'link-label-bg')
-        .attr('x', midX - labelWidth / 2)
-        .attr('y', midY - labelHeight / 2)
-        .attr('width', labelWidth)
-        .attr('height', labelHeight)
+        .attr('x', midX - 25)
+        .attr('y', midY - 8)
+        .attr('width', 50)
+        .attr('height', 16)
         .attr('rx', 3);
       
-      // Render each line
-      lines.forEach((line, i) => {
-        const yOffset = midY - labelHeight / 2 + 10 + (i * lineHeight);
-        group.append('text')
-          .attr('class', 'link-label')
-          .attr('x', midX)
-          .attr('y', yOffset)
-          .attr('text-anchor', 'middle')
-          .attr('fill', line.color)
-          .attr('font-weight', line.bold ? '600' : '400')
-          .attr('font-size', '8px')
-          .text(line.text);
-      });
+      group.append('text')
+        .attr('class', 'link-label')
+        .attr('x', midX)
+        .attr('y', midY + 3)
+        .attr('text-anchor', 'middle')
+        .attr('fill', fastenerColor)
+        .text(labelText);
     }
   });
   
@@ -875,31 +843,17 @@ function setupForceSimulation(visibleNodes, visibleLinks) {
         d3.select(this).select('.link')
           .attr('d', calculateLinkPath(source, target));
         
-        // Update label positions at midpoint
+        // Update label position at midpoint
         const midX = (source.x + target.x) / 2;
         const midY = (source.y + target.y) / 2;
         
-        // Get label background and adjust position
-        const labelBg = d3.select(this).select('.link-label-bg');
-        if (!labelBg.empty()) {
-          const bgWidth = parseFloat(labelBg.attr('width')) || 50;
-          const bgHeight = parseFloat(labelBg.attr('height')) || 16;
-          labelBg
-            .attr('x', midX - bgWidth / 2)
-            .attr('y', midY - bgHeight / 2);
-        }
+        d3.select(this).select('.link-label-bg')
+          .attr('x', midX - 25)
+          .attr('y', midY - 8);
         
-        // Update all label text positions
-        const labels = d3.select(this).selectAll('.link-label');
-        const labelCount = labels.size();
-        const lineHeight = 11;
-        const totalHeight = labelCount * lineHeight + 6;
-        
-        labels.each(function(d, i) {
-          d3.select(this)
-            .attr('x', midX)
-            .attr('y', midY - totalHeight / 2 + 10 + (i * lineHeight));
-        });
+        d3.select(this).select('.link-label')
+          .attr('x', midX)
+          .attr('y', midY + 3);
       });
     });
   
