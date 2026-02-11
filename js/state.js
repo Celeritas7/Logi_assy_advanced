@@ -61,6 +61,7 @@ export let collapsedNodes = new Set();
 export let lockedNodes = new Set();
 export let positionHistory = [];
 export let shiftKeyPressed = false;
+export let isDragging = false;
 
 export function setSimulation(sim) {
   simulation = sim;

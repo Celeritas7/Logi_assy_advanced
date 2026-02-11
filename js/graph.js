@@ -880,6 +880,9 @@ function dragStarted(event, d) {
   
   d.fx = d.x;
   d.fy = d.y;
+  
+  // Mark as dragging
+  state.isDragging = true;
 }
 
 function dragged(event, d) {
@@ -907,7 +910,8 @@ function dragged(event, d) {
     d.fy = event.y;
   }
   
-  renderGraph();
+  // Update positions smoothly WITHOUT re-rendering entire graph
+  updatePositions();
 }
 
 function dragEnded(event, d) {
@@ -925,6 +929,49 @@ function dragEnded(event, d) {
     d.fx = null;
     d.fy = null;
   }
+  
+  // Mark as not dragging
+  state.isDragging = false;
+  
+  // Do a full render on drag end to update bounds if needed
+  renderGraph();
+}
+
+// ============================================================
+// UPDATE POSITIONS (smooth, no re-render)
+// ============================================================
+function updatePositions() {
+  const svg = d3.select('#treeSvg');
+  const g = svg.select('g.zoom-group');
+  
+  // Update node positions
+  g.selectAll('.node')
+    .attr('transform', d => {
+      const node = state.nodes.find(n => n.id === d.id);
+      if (node) {
+        return `translate(${node.x}, ${node.y})`;
+      }
+      return `translate(${d.x}, ${d.y})`;
+    });
+  
+  // Update link paths
+  g.selectAll('.link-group').each(function(linkData) {
+    const group = d3.select(this);
+    const source = state.nodes.find(n => n.id === linkData.child_id);
+    const target = state.nodes.find(n => n.id === linkData.parent_id);
+    
+    if (source && target) {
+      // Update the path
+      group.select('path.link')
+        .attr('d', calculateLinkPath(source, target));
+      
+      // Update the label position
+      const midX = (source.x + target.x) / 2;
+      const midY = (source.y + target.y) / 2 - 15;
+      group.select('.link-label-group')
+        .attr('transform', `translate(${midX}, ${midY})`);
+    }
+  });
 }
 
 function getNodeWithChildren(nodeId) {
