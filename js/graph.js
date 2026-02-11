@@ -18,6 +18,87 @@ import {
 } from './ui.js';
 
 // ============================================================
+// ZOOM STATE & CONTROLS
+// ============================================================
+let zoomBehavior = null;
+let currentTransform = d3.zoomIdentity;
+
+export function initZoom() {
+  const svg = d3.select('#treeSvg');
+  const g = svg.select('g.zoom-group');
+  
+  zoomBehavior = d3.zoom()
+    .scaleExtent([0.1, 3])
+    .on('zoom', (event) => {
+      currentTransform = event.transform;
+      g.attr('transform', event.transform);
+    });
+  
+  svg.call(zoomBehavior);
+}
+
+export function zoomIn() {
+  const svg = d3.select('#treeSvg');
+  svg.transition().duration(300).call(zoomBehavior.scaleBy, 1.3);
+}
+
+export function zoomOut() {
+  const svg = d3.select('#treeSvg');
+  svg.transition().duration(300).call(zoomBehavior.scaleBy, 0.7);
+}
+
+export function fitToScreen() {
+  if (state.nodes.length === 0) return;
+  
+  const container = document.getElementById('treeContainer');
+  const svg = d3.select('#treeSvg');
+  
+  // Calculate bounds of all nodes
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  state.nodes.forEach(n => {
+    if (n.deleted) return;
+    minX = Math.min(minX, (n.x || 400) - 80);
+    maxX = Math.max(maxX, (n.x || 400) + 80);
+    minY = Math.min(minY, (n.y || 300) - 40);
+    maxY = Math.max(maxY, (n.y || 300) + 40);
+  });
+  
+  const contentWidth = maxX - minX;
+  const contentHeight = maxY - minY;
+  const containerWidth = container.clientWidth - 40;
+  const containerHeight = container.clientHeight - 40;
+  
+  const scale = Math.min(
+    containerWidth / contentWidth,
+    containerHeight / contentHeight,
+    1.5 // Max zoom for fit
+  ) * 0.9; // 90% to add some padding
+  
+  const centerX = (minX + maxX) / 2;
+  const centerY = (minY + maxY) / 2;
+  
+  const translateX = containerWidth / 2 - centerX * scale;
+  const translateY = containerHeight / 2 - centerY * scale;
+  
+  const transform = d3.zoomIdentity
+    .translate(translateX, translateY)
+    .scale(scale);
+  
+  svg.transition().duration(500).call(zoomBehavior.transform, transform);
+}
+
+export function resetView() {
+  const svg = d3.select('#treeSvg');
+  svg.transition().duration(300).call(zoomBehavior.transform, d3.zoomIdentity);
+}
+
+// Make functions globally available
+window.zoomIn = zoomIn;
+window.zoomOut = zoomOut;
+window.fitToScreen = fitToScreen;
+window.resetView = resetView;
+
+// ============================================================
 // LOAD ASSEMBLY DATA
 // ============================================================
 export async function loadAssemblyData(assemblyId) {
@@ -508,7 +589,11 @@ export function renderGraph() {
     .attr('fill', '#666');
   
   // Main group
-  const g = svg.append('g');
+  const g = svg.append('g')
+    .attr('class', 'zoom-group');
+  
+  // Initialize zoom behavior
+  initZoom();
   
   // Render links with curved paths
   const linkGroups = g.selectAll('.link-group')
