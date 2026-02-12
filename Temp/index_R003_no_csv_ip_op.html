@@ -96,14 +96,10 @@
     <div class="dropdown">
       <button class="header-btn dropdown-btn" onclick="toggleExportDropdown()">📤 Export ▼</button>
       <div class="dropdown-content" id="exportDropdown">
-        <a href="#" onclick="downloadCSV(); return false;">📋 Download CSV</a>
         <a href="#" onclick="downloadPNG(); return false;">📷 Download PNG</a>
         <a href="#" onclick="downloadSVG(); return false;">📐 Download SVG</a>
       </div>
     </div>
-    
-    <button class="header-btn admin-only" style="background:#27ae60;" onclick="openImportCSV()">📥 Import CSV</button>
-    <input type="file" id="csvFileInput" accept=".csv" style="display:none;" onchange="handleCSVFile(event)">
   </div>
   
   <span id="statusIndicator" class="status-text"></span>
