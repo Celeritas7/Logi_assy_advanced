@@ -24,6 +24,9 @@ export async function downloadPNG() {
     // Clone SVG
     const clone = svg.cloneNode(true);
     
+    // Remove collapse indicators and lock icons for clean export
+    cleanSvgForExport(clone);
+    
     // Embed styles
     const styleElement = document.createElementNS('http://www.w3.org/2000/svg', 'style');
     styleElement.textContent = getEmbeddedStyles();
@@ -94,6 +97,9 @@ export function downloadSVG() {
     // Clone SVG
     const clone = svg.cloneNode(true);
     
+    // Remove collapse indicators and lock icons for clean export
+    cleanSvgForExport(clone);
+    
     // Embed styles
     const styleElement = document.createElementNS('http://www.w3.org/2000/svg', 'style');
     styleElement.textContent = getEmbeddedStyles();
@@ -122,6 +128,30 @@ export function downloadSVG() {
     console.error('Error generating SVG:', e);
     showToast('Failed to generate SVG', 'error');
   }
+}
+
+// ============================================================
+// CLEAN SVG FOR EXPORT - Remove UI elements
+// ============================================================
+function cleanSvgForExport(svgClone) {
+  // Remove collapse indicators (circles with +/- signs)
+  const collapseIndicators = svgClone.querySelectorAll('.collapse-indicator');
+  collapseIndicators.forEach(el => el.remove());
+  
+  // Remove toggle icons (+/- text)
+  const toggleIcons = svgClone.querySelectorAll('.toggle-icon');
+  toggleIcons.forEach(el => el.remove());
+  
+  // Remove lock indicators
+  const lockIndicators = svgClone.querySelectorAll('.lock-indicator');
+  lockIndicators.forEach(el => el.remove());
+  
+  // Remove any clickable areas that shouldn't be in export
+  const clickables = svgClone.querySelectorAll('.link-clickable');
+  clickables.forEach(el => {
+    // Keep the element but remove hover/click styling
+    el.style.cursor = 'default';
+  });
 }
 
 // ============================================================
@@ -157,6 +187,21 @@ function getEmbeddedStyles() {
     .link-label-bg {
       fill: white;
       opacity: 0.95;
+    }
+    .sequence-number {
+      font-size: 16px;
+      font-weight: 700;
+      fill: #000000;
+    }
+    .sequence-badge-bg {
+      fill: #e74c3c;
+      stroke: #c0392b;
+      stroke-width: 1.5px;
+    }
+    .sequence-badge-text {
+      font-size: 12px;
+      font-weight: 700;
+      fill: #ffffff;
     }
     .sequence-badge {
       font-size: 11px;

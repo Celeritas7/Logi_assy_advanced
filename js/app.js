@@ -180,6 +180,18 @@ window.toggleExportDropdown = toggleExportDropdown;
 window.downloadPNG = downloadPNG;
 window.downloadSVG = downloadSVG;
 
+// Sequence number toggle
+window.toggleSequenceNumbers = function() {
+  state.setShowSequenceNumbers(!state.showSequenceNumbers);
+  const btn = document.getElementById('seqToggleBtn');
+  if (btn) {
+    btn.style.background = state.showSequenceNumbers ? '#3498db' : '#95a5a6';
+    btn.title = state.showSequenceNumbers ? 'Hide Sequence Numbers' : 'Show Sequence Numbers';
+  }
+  renderGraph();
+  showToast(`Sequence numbers ${state.showSequenceNumbers ? 'visible' : 'hidden'}`, 'info');
+};
+
 // Side panel
 window.closeSidePanel = () => {
   document.getElementById('sidePanel').classList.remove('open');

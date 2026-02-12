@@ -763,13 +763,14 @@ export function renderGraph() {
         .text(d.part_number);
     }
     
-    // Sequence badge
-    if (d.sequence_num != null && d.sequence_num > 0) {
+    // Sequence badge - black text, top-right corner, 16px
+    if (d.sequence_num != null && d.sequence_num > 0 && state.showSequenceNumbers) {
       group.append('text')
-        .attr('class', 'sequence-badge')
-        .attr('x', d.width/2 - 5)
-        .attr('y', -d.height/2 + 5)
-        .text(getSequenceBadge(d.sequence_num));
+        .attr('class', 'sequence-number')
+        .attr('x', d.width/2 + 8)
+        .attr('y', -d.height/2 + 4)
+        .attr('text-anchor', 'start')
+        .text(d.sequence_num);
     }
   });
   
