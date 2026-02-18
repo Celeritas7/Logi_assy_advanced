@@ -1101,7 +1101,7 @@ export function renderGraph() {
     const labelHeight = hasLabel ? (lines.length * lineHeight + 6) : 20;
     const labelWidth = hasLabel ? Math.max(50, ...lines.map(l => l.text.length * 5.5 + 10)) : 30;
     
-    // Background rect - ALWAYS clickable for easy editing
+    // Background rect - only visible if has label, but always clickable for admin
     group.append('rect')
       .attr('class', 'link-label-bg link-clickable')
       .attr('x', midX - labelWidth / 2)
@@ -1109,7 +1109,9 @@ export function renderGraph() {
       .attr('width', labelWidth)
       .attr('height', labelHeight)
       .attr('rx', 3)
+      .attr('data-has-label', hasLabel ? 'true' : 'false')
       .style('cursor', state.isAdmin ? 'pointer' : 'default')
+      .style('fill', hasLabel ? 'white' : 'transparent')
       .style('opacity', hasLabel ? 0.95 : 0)
       .on('click', (e) => {
         if (!state.isAdmin) return;
@@ -1122,7 +1124,7 @@ export function renderGraph() {
         showLinkContextMenu(e.clientX, e.clientY, linkData);
       })
       .on('mouseover', function() {
-        if (state.isAdmin) {
+        if (state.isAdmin && hasLabel) {
           d3.select(this).style('opacity', 1).attr('stroke', '#3498db').attr('stroke-width', 1);
         }
       })
@@ -1130,19 +1132,23 @@ export function renderGraph() {
         d3.select(this).style('opacity', hasLabel ? 0.95 : 0).attr('stroke', 'none');
       });
     
-    // Render label text lines
+    // Render label text lines with stored offsets for repositioning
     if (hasLabel) {
       lines.forEach((line, i) => {
-        const yOffset = midY - labelHeight / 2 + 10 + (i * lineHeight);
+        // Calculate offset from center
+        const totalLabelHeight = lines.length * lineHeight;
+        const lineOffsetFromCenter = -totalLabelHeight / 2 + 6 + (i * lineHeight);
+        
         group.append('text')
           .attr('class', 'link-label')
           .attr('x', midX)
-          .attr('y', yOffset)
+          .attr('y', midY + lineOffsetFromCenter)
+          .attr('data-dy', lineOffsetFromCenter)  // Store offset for repositioning
           .attr('text-anchor', 'middle')
           .attr('fill', line.color)
           .attr('font-weight', line.bold ? '600' : '400')
           .attr('font-size', '8px')
-          .style('pointer-events', 'none')  // Let clicks pass through to background
+          .style('pointer-events', 'none')
           .text(line.text);
       });
     }
@@ -1327,7 +1333,7 @@ function setupNodeInteractions(nodeElements, isTreeMode = false) {
 }
 
 // ============================================================
-// TREE MODE DRAG HANDLERS (Vertical Only)
+// TREE MODE DRAG HANDLERS (Vertical Only + Move Children)
 // ============================================================
 function treeDragStarted(event, d) {
   if (!state.isAdmin) return;
@@ -1344,9 +1350,30 @@ function treeDragStarted(event, d) {
     d._dragStartTreeY = d.treeY || d.tree_y || d.y || 0;
   }
   
-  // Save position for undo
+  // Get all children (descendants) that should move with this node
+  d._childrenToMove = getTreeDescendants(d.id);
+  
+  // Store initial Y positions of all nodes to move
+  d._initialPositions = {};
+  d._initialPositions[d.id] = d._dragStartTreeY;
+  
+  d._childrenToMove.forEach(childId => {
+    const childNode = state.nodes.find(n => n.id === childId);
+    if (childNode) {
+      const childEl = d3.select(`.node`).filter(function(n) { return n.id === childId; });
+      const childTransform = childEl.attr('transform');
+      const childMatch = childTransform ? childTransform.match(/translate\(([^,]+),\s*([^)]+)\)/) : null;
+      d._initialPositions[childId] = childMatch ? parseFloat(childMatch[2]) : (childNode.treeY || childNode.y || 0);
+    }
+  });
+  
+  // Save positions for undo
+  const allNodeIds = [d.id, ...d._childrenToMove];
   state.pushPositionHistory({
-    nodes: [{ id: d.id, tree_y: d._dragStartTreeY }]
+    nodes: allNodeIds.map(nid => {
+      const node = state.nodes.find(n => n.id === nid);
+      return { id: nid, tree_y: node?.treeY || node?.tree_y || d._initialPositions[nid] };
+    })
   });
   updateUndoButton();
   
@@ -1361,19 +1388,39 @@ function treeDragged(event, d) {
   
   // Calculate new Y position (accounting for initial offset)
   const newY = event.y - (d._dragOffsetY || 0);
+  const deltaY = newY - d._dragStartTreeY;
   
   // Keep X fixed (level column)
   const fixedX = d._dragStartTreeX || d.treeX || d.x;
   
-  // Update node data
+  // Update main node data
   d.treeY = newY;
   d.tree_y = newY;
   
-  // Update node position visually
+  // Update main node position visually
   d3.select(this).attr('transform', `translate(${fixedX}, ${newY})`);
   
-  // Update connected links
-  updateLinksForNode(d, fixedX, newY);
+  // Move all children by the same delta
+  if (d._childrenToMove && d._childrenToMove.length > 0) {
+    d._childrenToMove.forEach(childId => {
+      const childNode = state.nodes.find(n => n.id === childId);
+      if (childNode) {
+        const initialY = d._initialPositions[childId] || childNode.treeY || childNode.y;
+        const childNewY = initialY + deltaY;
+        
+        childNode.treeY = childNewY;
+        childNode.tree_y = childNewY;
+        
+        // Update child visual position
+        d3.selectAll('.node')
+          .filter(n => n.id === childId)
+          .attr('transform', `translate(${childNode.treeX || childNode.x}, ${childNewY})`);
+      }
+    });
+  }
+  
+  // Update all connected links
+  updateAllTreeLinks();
 }
 
 function treeDragEnded(event, d) {
@@ -1384,6 +1431,8 @@ function treeDragEnded(event, d) {
   delete d._dragOffsetY;
   delete d._dragStartTreeX;
   delete d._dragStartTreeY;
+  delete d._childrenToMove;
+  delete d._initialPositions;
   
   // Mark as needing save
   const saveBtn = document.getElementById('saveBtn');
@@ -1393,64 +1442,91 @@ function treeDragEnded(event, d) {
   }
 }
 
-function updateLinksForNode(movedNode, nodeX, nodeY) {
-  // Update all links connected to this node
+// Get all descendants (children, grandchildren, etc.) of a node in tree
+function getTreeDescendants(nodeId) {
+  const descendants = [];
+  const visited = new Set();
+  
+  // Build parent->children map
+  const parentToChildren = {};
+  state.links.forEach(link => {
+    if (!parentToChildren[link.parent_id]) parentToChildren[link.parent_id] = [];
+    parentToChildren[link.parent_id].push(link.child_id);
+  });
+  
+  // BFS to find all descendants
+  const queue = [...(parentToChildren[nodeId] || [])];
+  
+  while (queue.length > 0) {
+    const childId = queue.shift();
+    if (visited.has(childId)) continue;
+    visited.add(childId);
+    descendants.push(childId);
+    
+    // Add this child's children to queue
+    const grandchildren = parentToChildren[childId] || [];
+    grandchildren.forEach(gc => {
+      if (!visited.has(gc)) queue.push(gc);
+    });
+  }
+  
+  return descendants;
+}
+
+// Update all links in tree mode
+function updateAllTreeLinks() {
   d3.selectAll('.link-group').each(function() {
     const group = d3.select(this);
     const path = group.select('path.link');
-    
-    // Get link data from the path
     const linkData = path.datum();
+    
     if (!linkData) return;
     
-    if (linkData.child_id === movedNode.id || linkData.parent_id === movedNode.id) {
-      // Find source and target nodes
-      const source = state.nodes.find(n => n.id === linkData.child_id);
-      const target = state.nodes.find(n => n.id === linkData.parent_id);
-      
-      if (source && target) {
-        // Get current positions
-        let sourceX, sourceY, targetX, targetY;
-        
-        if (source.id === movedNode.id) {
-          sourceX = nodeX;
-          sourceY = nodeY;
-          targetX = target.treeX || target.x;
-          targetY = target.treeY || target.tree_y || target.y;
-        } else {
-          sourceX = source.treeX || source.x;
-          sourceY = source.treeY || source.tree_y || source.y;
-          targetX = nodeX;
-          targetY = nodeY;
-        }
-        
-        const sourceW = source.treeWidth || 60;
-        const targetW = target.treeWidth || 60;
-        
-        const sx = sourceX + sourceW / 2;
-        const sy = sourceY;
-        const tx = targetX - targetW / 2;
-        const ty = targetY;
-        const midX = (sx + tx) / 2;
-        
-        // Update path with smooth curve
-        path.attr('d', `M ${sx} ${sy} C ${midX} ${sy}, ${midX} ${ty}, ${tx} ${ty}`);
-        
-        // Update label position
-        const newMidX = (sourceX + targetX) / 2;
-        const newMidY = (sy + ty) / 2;
-        
-        const labelBg = group.select('.link-label-bg');
-        if (labelBg.size()) {
-          const width = parseFloat(labelBg.attr('width')) || 30;
-          const height = parseFloat(labelBg.attr('height')) || 20;
-          labelBg.attr('x', newMidX - width / 2).attr('y', newMidY - height / 2);
-        }
-        
-        group.selectAll('.link-label').attr('x', newMidX);
-      }
+    const source = state.nodes.find(n => n.id === linkData.child_id);
+    const target = state.nodes.find(n => n.id === linkData.parent_id);
+    
+    if (!source || !target) return;
+    
+    const sourceX = source.treeX || source.x;
+    const sourceY = source.treeY || source.tree_y || source.y;
+    const targetX = target.treeX || target.x;
+    const targetY = target.treeY || target.tree_y || target.y;
+    const sourceW = source.treeWidth || 60;
+    const targetW = target.treeWidth || 60;
+    
+    const sx = sourceX + sourceW / 2;
+    const sy = sourceY;
+    const tx = targetX - targetW / 2;
+    const ty = targetY;
+    const midX = (sx + tx) / 2;
+    
+    // Update path
+    path.attr('d', `M ${sx} ${sy} C ${midX} ${sy}, ${midX} ${ty}, ${tx} ${ty}`);
+    
+    // Update label position
+    const newMidX = (sourceX + targetX) / 2;
+    const newMidY = (sy + ty) / 2;
+    
+    // Move label background
+    const labelBg = group.select('.link-label-bg');
+    if (labelBg.size()) {
+      const width = parseFloat(labelBg.attr('width')) || 30;
+      const height = parseFloat(labelBg.attr('height')) || 20;
+      labelBg.attr('x', newMidX - width / 2).attr('y', newMidY - height / 2);
     }
+    
+    // Move all label text elements
+    group.selectAll('.link-label').each(function(_, i) {
+      const label = d3.select(this);
+      const dy = parseFloat(label.attr('data-dy')) || 0;
+      label.attr('x', newMidX).attr('y', newMidY + dy);
+    });
   });
+}
+
+function updateLinksForNode(movedNode, nodeX, nodeY) {
+  // This function is now replaced by updateAllTreeLinks
+  updateAllTreeLinks();
 }
 
 // ============================================================
