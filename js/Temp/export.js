@@ -221,15 +221,6 @@ function getEmbeddedStyles() {
       stroke: #333;
       stroke-width: 1.5px;
     }
-    .level-header-bg {
-      fill: #3498db;
-      opacity: 0.9;
-    }
-    .level-header-text {
-      fill: white;
-      font-size: 14px;
-      font-weight: 600;
-    }
     ${fontSizeStyles}
   `;
 }

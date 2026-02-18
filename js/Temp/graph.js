@@ -529,77 +529,6 @@ function drawShape(selection, shapeType, width, height, fill, stroke, isMultiPar
 }
 
 // ============================================================
-// TREE LAYOUT CALCULATION
-// ============================================================
-function calculateTreeLayout(nodes, links) {
-  // Group nodes by level
-  const levelGroups = {};
-  let maxLevel = 1;
-  
-  nodes.forEach(n => {
-    const level = n.level || 1;
-    if (!levelGroups[level]) levelGroups[level] = [];
-    levelGroups[level].push(n);
-    maxLevel = Math.max(maxLevel, level);
-  });
-  
-  // Sort nodes within each level by sequence number, then by name
-  Object.values(levelGroups).forEach(group => {
-    group.sort((a, b) => {
-      // First by sequence number
-      const seqA = a.sequence_num || 9999;
-      const seqB = b.sequence_num || 9999;
-      if (seqA !== seqB) return seqA - seqB;
-      // Then by name
-      return (a.name || '').localeCompare(b.name || '');
-    });
-  });
-  
-  // Tree layout settings - compact nodes
-  const nodeWidth = 140;
-  const nodeHeight = 45;
-  const horizontalGap = 180;  // Gap between levels (columns)
-  const verticalGap = 60;     // Gap between nodes in same level
-  const headerHeight = 50;    // Space for level headers
-  const leftPadding = 100;
-  const topPadding = 80;
-  
-  // Calculate positions - L3/L4 on left, L1 on right
-  // Flow: Parts (high level) → Assembly (low level)
-  const treePositions = {};
-  
-  // Reverse the column order: highest level on left, L1 on right
-  const levels = Object.keys(levelGroups).map(Number).sort((a, b) => b - a);
-  
-  levels.forEach((level, colIndex) => {
-    const nodesInLevel = levelGroups[level];
-    const columnX = leftPadding + colIndex * horizontalGap;
-    
-    nodesInLevel.forEach((node, rowIndex) => {
-      treePositions[node.id] = {
-        x: columnX,
-        y: topPadding + headerHeight + rowIndex * verticalGap,
-        treeWidth: nodeWidth - 20,  // Compact width
-        treeHeight: nodeHeight - 10  // Compact height
-      };
-    });
-  });
-  
-  // Calculate total dimensions
-  const totalWidth = leftPadding * 2 + (levels.length - 1) * horizontalGap + nodeWidth;
-  const maxNodesInLevel = Math.max(...Object.values(levelGroups).map(g => g.length));
-  const totalHeight = topPadding + headerHeight + maxNodesInLevel * verticalGap + 50;
-  
-  return {
-    positions: treePositions,
-    levels: levels,
-    levelGroups: levelGroups,
-    dimensions: { width: totalWidth, height: totalHeight },
-    settings: { horizontalGap, leftPadding, topPadding, headerHeight }
-  };
-}
-
-// ============================================================
 // RENDER GRAPH
 // ============================================================
 export function renderGraph() {
@@ -622,53 +551,22 @@ export function renderGraph() {
     return;
   }
   
-  // Check if tree layout mode
-  const isTreeMode = state.currentLayoutMode === 'tree';
-  let treeLayout = null;
-  
-  if (isTreeMode) {
-    treeLayout = calculateTreeLayout(state.nodes, state.links);
-  }
-  
   const visibleNodes = state.nodes.filter(isNodeVisible);
   const visibleNodeIds = new Set(visibleNodes.map(n => n.id));
   const visibleLinks = state.links.filter(l => 
     visibleNodeIds.has(l.parent_id) && visibleNodeIds.has(l.child_id)
   );
   
-  // Apply tree positions if in tree mode
-  if (isTreeMode && treeLayout) {
-    visibleNodes.forEach(n => {
-      const pos = treeLayout.positions[n.id];
-      if (pos) {
-        n.treeX = pos.x;
-        n.treeY = pos.y;
-        n.treeWidth = pos.treeWidth;
-        n.treeHeight = pos.treeHeight;
-      }
-    });
-  }
-  
   // Calculate bounds
   let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  visibleNodes.forEach(n => {
+    minX = Math.min(minX, (n.x || 400) - 100);
+    maxX = Math.max(maxX, (n.x || 400) + 100);
+    minY = Math.min(minY, (n.y || 300) - 50);
+    maxY = Math.max(maxY, (n.y || 300) + 50);
+  });
   
-  if (isTreeMode && treeLayout) {
-    // Use tree layout dimensions
-    const dim = treeLayout.dimensions;
-    minX = 0;
-    maxX = dim.width;
-    minY = 0;
-    maxY = dim.height;
-  } else {
-    visibleNodes.forEach(n => {
-      minX = Math.min(minX, (n.x || 400) - 100);
-      maxX = Math.max(maxX, (n.x || 400) + 100);
-      minY = Math.min(minY, (n.y || 300) - 50);
-      maxY = Math.max(maxY, (n.y || 300) + 50);
-    });
-  }
-  
-  const padding = isTreeMode ? 50 : 200;
+  const padding = 200;
   const width = Math.max(container.clientWidth, maxX - minX + padding * 2);
   const height = Math.max(container.clientHeight, maxY - minY + padding * 2);
   
@@ -697,38 +595,6 @@ export function renderGraph() {
   // Initialize zoom behavior
   initZoom();
   
-  // Render level headers if in tree mode and enabled
-  if (isTreeMode && treeLayout && state.showLevelHeaders) {
-    const { levels, settings } = treeLayout;
-    const { horizontalGap, leftPadding, topPadding } = settings;
-    
-    levels.forEach((level, colIndex) => {
-      const headerX = leftPadding + colIndex * horizontalGap;
-      
-      // Header background
-      g.append('rect')
-        .attr('class', 'level-header-bg')
-        .attr('x', headerX - 50)
-        .attr('y', topPadding)
-        .attr('width', 100)
-        .attr('height', 30)
-        .attr('rx', 4)
-        .attr('fill', '#3498db')
-        .attr('opacity', 0.9);
-      
-      // Header text
-      g.append('text')
-        .attr('class', 'level-header-text')
-        .attr('x', headerX)
-        .attr('y', topPadding + 20)
-        .attr('text-anchor', 'middle')
-        .attr('fill', 'white')
-        .attr('font-size', '14px')
-        .attr('font-weight', '600')
-        .text(`L${level}`);
-    });
-  }
-  
   // Render links with curved paths
   const linkGroups = g.selectAll('.link-group')
     .data(visibleLinks, d => `${d.child_id}-${d.parent_id}`)
@@ -743,38 +609,13 @@ export function renderGraph() {
     
     if (!source || !target) return;
     
-    // Get positions based on mode
-    const sourceX = isTreeMode ? (source.treeX || source.x) : source.x;
-    const sourceY = isTreeMode ? (source.treeY || source.y) : source.y;
-    const targetX = isTreeMode ? (target.treeX || target.x) : target.x;
-    const targetY = isTreeMode ? (target.treeY || target.y) : target.y;
-    const sourceW = isTreeMode ? (source.treeWidth || source.width) : source.width;
-    const sourceH = isTreeMode ? (source.treeHeight || source.height) : source.height;
-    const targetW = isTreeMode ? (target.treeWidth || target.width) : target.width;
-    const targetH = isTreeMode ? (target.treeHeight || target.height) : target.height;
-    
     // Get color
     const fastenerColor = getFastenerColor(linkData.fastener);
     
-    // Draw link path
-    let pathD;
-    if (isTreeMode) {
-      // Horizontal tree: straight lines with right-angle bends
-      // Source is on LEFT (higher level), target is on RIGHT (lower level)
-      // Connection: source right edge → target left edge
-      const sx = sourceX + sourceW / 2;  // Right edge of source
-      const sy = sourceY;
-      const tx = targetX - targetW / 2;  // Left edge of target
-      const ty = targetY;
-      const midX = (sx + tx) / 2;
-      pathD = `M ${sx} ${sy} C ${midX} ${sy}, ${midX} ${ty}, ${tx} ${ty}`;
-    } else {
-      pathD = calculateLinkPath(source, target);
-    }
-    
+    // Draw curved link path using Bezier curves
     group.append('path')
       .attr('class', 'link')
-      .attr('d', pathD)
+      .attr('d', calculateLinkPath(source, target))
       .attr('stroke', fastenerColor)
       .attr('stroke-width', 1.5)
       .attr('fill', 'none')
@@ -787,8 +628,8 @@ export function renderGraph() {
     
     // Link label at midpoint (Fastener, Loctite, Torque)
     // Always show a clickable area even if no label data
-    const midX = (sourceX + targetX) / 2;
-    const midY = (sourceY + targetY) / 2;
+    const midX = (source.x + target.x) / 2;
+    const midY = (source.y + target.y) / 2;
     
     const hasLabel = linkData.fastener || linkData.loctite || linkData.torque_value;
     
@@ -866,12 +707,8 @@ export function renderGraph() {
     .data(visibleNodes, d => d.id)
     .enter()
     .append('g')
-    .attr('class', d => `node ${state.lockedNodes.has(d.id) ? 'locked' : ''} ${isTreeMode ? 'tree-mode' : ''}`)
-    .attr('transform', d => {
-      const x = isTreeMode ? (d.treeX || d.x || 400) : (d.x || 400);
-      const y = isTreeMode ? (d.treeY || d.y || 300) : (d.y || 300);
-      return `translate(${x}, ${y})`;
-    });
+    .attr('class', d => `node ${state.lockedNodes.has(d.id) ? 'locked' : ''}`)
+    .attr('transform', d => `translate(${d.x || 400}, ${d.y || 300})`);
   
   nodeElements.each(function(d) {
     const group = d3.select(this);
@@ -880,12 +717,8 @@ export function renderGraph() {
     const isMultiParent = d.goesInto.length > 1;
     const isOrphan = d.goesInto.length === 0 && d.receivesFrom.length === 0 && state.nodes.length > 1;
     
-    // Get dimensions based on mode
-    const nodeW = isTreeMode ? (d.treeWidth || d.width) : d.width;
-    const nodeH = isTreeMode ? (d.treeHeight || d.height) : d.height;
-    
     // Draw shape
-    drawShape(group, shape, nodeW, nodeH, color, '#555', isMultiParent, isOrphan);
+    drawShape(group, shape, d.width, d.height, color, '#555', isMultiParent, isOrphan);
     
     // v28: Status indicator dot (top-left, visible to all)
     const statusColors = {
@@ -900,15 +733,15 @@ export function renderGraph() {
     
     group.append('circle')
       .attr('class', 'status-indicator')
-      .attr('cx', -nodeW/2 + 10)
-      .attr('cy', -nodeH/2 + 10)
-      .attr('r', isTreeMode ? 4 : 5)
+      .attr('cx', -d.width/2 + 10)
+      .attr('cy', -d.height/2 + 10)
+      .attr('r', 5)
       .attr('fill', statusColor)
       .attr('stroke', 'white')
       .attr('stroke-width', 1.5);
     
-    // Get font styling - smaller in tree mode
-    const fontSize = isTreeMode ? Math.min(getLevelFontSize(d.level), 11) : getLevelFontSize(d.level);
+    // Get font styling
+    const fontSize = getLevelFontSize(d.level);
     const fontWeight = getLevelFontWeight(d.level);
     
     // Node label
@@ -920,8 +753,8 @@ export function renderGraph() {
       .attr('font-weight', fontWeight)
       .text(d.name);
     
-    // Part number (always 7px) - only show in force mode or if space allows
-    if (d.part_number && !isTreeMode) {
+    // Part number (always 7px)
+    if (d.part_number) {
       group.append('text')
         .attr('class', 'node-pn')
         .attr('text-anchor', 'middle')
@@ -934,50 +767,47 @@ export function renderGraph() {
     if (d.sequence_num != null && d.sequence_num > 0 && state.showSequenceNumbers) {
       group.append('text')
         .attr('class', 'sequence-number')
-        .attr('x', nodeW/2 + 8)
-        .attr('y', -nodeH/2 + 4)
+        .attr('x', d.width/2 + 8)
+        .attr('y', -d.height/2 + 4)
         .attr('text-anchor', 'start')
-        .attr('font-size', isTreeMode ? '14px' : '16px')
         .text(d.sequence_num);
     }
   });
   
-  // Collapse indicators - only show in force mode
-  if (!isTreeMode) {
-    nodeElements.filter(d => d.receivesFrom.length > 0).each(function(d) {
-      const group = d3.select(this);
-      const isCollapsed = state.collapsedNodes.has(d.id);
-      
-      // Circle on right edge
-      group.append('circle')
-        .attr('class', 'collapse-indicator')
-        .attr('cx', d.width/2 + 12)
-        .attr('cy', 0)
-        .attr('r', 8)
-        .on('click', (e) => {
-          e.stopPropagation();
-          toggleCollapse(d.id);
-        });
-      
-      // +/- text
-      group.append('text')
-        .attr('class', 'toggle-icon')
-        .attr('x', d.width/2 + 12)
-        .attr('y', 0)
-        .attr('text-anchor', 'middle')
-        .attr('dy', '0.35em')
-        .attr('font-size', '12px')
-        .text(isCollapsed ? '+' : '−')
-        .style('cursor', 'pointer')
-        .on('click', (e) => {
-          e.stopPropagation();
-          toggleCollapse(d.id);
-        });
-    });
-  }
+  // Collapse indicators - positioned on RIGHT side of node
+  nodeElements.filter(d => d.receivesFrom.length > 0).each(function(d) {
+    const group = d3.select(this);
+    const isCollapsed = state.collapsedNodes.has(d.id);
+    
+    // Circle on right edge
+    group.append('circle')
+      .attr('class', 'collapse-indicator')
+      .attr('cx', d.width/2 + 12)
+      .attr('cy', 0)
+      .attr('r', 8)
+      .on('click', (e) => {
+        e.stopPropagation();
+        toggleCollapse(d.id);
+      });
+    
+    // +/- text
+    group.append('text')
+      .attr('class', 'toggle-icon')
+      .attr('x', d.width/2 + 12)
+      .attr('y', 0)
+      .attr('text-anchor', 'middle')
+      .attr('dy', '0.35em')
+      .attr('font-size', '12px')
+      .text(isCollapsed ? '+' : '−')
+      .style('cursor', 'pointer')
+      .on('click', (e) => {
+        e.stopPropagation();
+        toggleCollapse(d.id);
+      });
+  });
   
-  // Lock indicators - only show in force mode
-  if (state.isAdmin && !isTreeMode) {
+  // Lock indicators
+  if (state.isAdmin) {
     nodeElements.filter(d => state.lockedNodes.has(d.id)).each(function(d) {
       d3.select(this).append('text')
         .attr('class', 'lock-indicator')
@@ -990,9 +820,9 @@ export function renderGraph() {
   }
   
   // Setup interactions
-  setupNodeInteractions(nodeElements, isTreeMode);
+  setupNodeInteractions(nodeElements);
   
-  // Setup force simulation - only in force mode
+  // Setup force simulation
   if (state.currentLayoutMode === 'force') {
     setupForceSimulation(visibleNodes, visibleLinks);
   }
@@ -1001,18 +831,16 @@ export function renderGraph() {
 // ============================================================
 // NODE INTERACTIONS
 // ============================================================
-function setupNodeInteractions(nodeElements, isTreeMode = false) {
-  // Drag behavior - only in force mode and only for admins
-  if (!isTreeMode) {
-    const drag = d3.drag()
-      .on('start', dragStarted)
-      .on('drag', dragged)
-      .on('end', dragEnded);
-    
-    nodeElements.call(drag);
-  }
+function setupNodeInteractions(nodeElements) {
+  // Drag behavior
+  const drag = d3.drag()
+    .on('start', dragStarted)
+    .on('drag', dragged)
+    .on('end', dragEnded);
   
-  // Click to select/edit
+  nodeElements.call(drag);
+  
+  // Click to select
   nodeElements.on('click', (e, d) => {
     e.stopPropagation();
     if (state.isAdmin) {

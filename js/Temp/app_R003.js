@@ -192,44 +192,6 @@ window.toggleSequenceNumbers = function() {
   showToast(`Sequence numbers ${state.showSequenceNumbers ? 'visible' : 'hidden'}`, 'info');
 };
 
-// Level headers toggle
-window.toggleLevelHeaders = function() {
-  state.setShowLevelHeaders(!state.showLevelHeaders);
-  const btn = document.getElementById('levelToggleBtn');
-  if (btn) {
-    btn.style.background = state.showLevelHeaders ? '#3498db' : '#95a5a6';
-    btn.title = state.showLevelHeaders ? 'Hide Level Headers' : 'Show Level Headers';
-  }
-  renderGraph();
-  showToast(`Level headers ${state.showLevelHeaders ? 'visible' : 'hidden'}`, 'info');
-};
-
-// Layout mode toggle (Force / Tree)
-window.setLayoutMode = function(mode) {
-  state.setLayoutMode(mode);
-  
-  // Update button states
-  const forceBtn = document.getElementById('forceLayoutBtn');
-  const treeBtn = document.getElementById('treeLayoutBtn');
-  
-  if (forceBtn && treeBtn) {
-    forceBtn.classList.toggle('active', mode === 'force');
-    treeBtn.classList.toggle('active', mode === 'tree');
-  }
-  
-  // Show/hide force-only controls
-  const forceOnlyControls = ['refreshBtn', 'expandBtn', 'collapseBtn'];
-  forceOnlyControls.forEach(id => {
-    const el = document.getElementById(id);
-    if (el) {
-      el.style.display = mode === 'tree' ? 'none' : '';
-    }
-  });
-  
-  renderGraph();
-  showToast(`Layout: ${mode === 'force' ? 'Force' : 'Tree'}`, 'info');
-};
-
 // Side panel
 window.closeSidePanel = () => {
   document.getElementById('sidePanel').classList.remove('open');

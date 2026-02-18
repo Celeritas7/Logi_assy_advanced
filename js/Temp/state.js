@@ -116,7 +116,6 @@ export let currentLevelFilter = 'all';
 export let currentColorMode = 'level';
 export let currentLayoutMode = 'force';
 export let showSequenceNumbers = true;
-export let showLevelHeaders = true;
 
 export function setLevelFilter(filter) {
   currentLevelFilter = filter;
@@ -132,8 +131,4 @@ export function setLayoutMode(mode) {
 
 export function setShowSequenceNumbers(value) {
   showSequenceNumbers = value;
-}
-
-export function setShowLevelHeaders(value) {
-  showLevelHeaders = value;
 }
