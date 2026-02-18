@@ -1298,8 +1298,15 @@ function setupNodeInteractions(nodeElements, isTreeMode = false) {
   // Drag behavior - different for force vs tree mode
   if (state.isAdmin) {
     if (isTreeMode) {
-      // Tree mode: vertical drag only
+      // Tree mode: vertical drag only with proper subject
       const treeDrag = d3.drag()
+        .subject(function(event, d) {
+          // Return the current position as the subject
+          return {
+            x: d.treeX || d.x || 0,
+            y: d.treeY || d.tree_y || d.y || 0
+          };
+        })
         .on('start', treeDragStarted)
         .on('drag', treeDragged)
         .on('end', treeDragEnded);
@@ -1338,17 +1345,9 @@ function setupNodeInteractions(nodeElements, isTreeMode = false) {
 function treeDragStarted(event, d) {
   if (!state.isAdmin) return;
   
-  // Get current visual position from the transform
-  const currentTransform = d3.select(this).attr('transform');
-  const match = currentTransform.match(/translate\(([^,]+),\s*([^)]+)\)/);
-  
-  if (match) {
-    d._dragStartTreeX = parseFloat(match[1]);
-    d._dragStartTreeY = parseFloat(match[2]);
-  } else {
-    d._dragStartTreeX = d.treeX || d.x || 0;
-    d._dragStartTreeY = d.treeY || d.tree_y || d.y || 0;
-  }
+  // Store the initial position from subject (which is the node's current position)
+  d._dragStartTreeX = event.subject.x;
+  d._dragStartTreeY = event.subject.y;
   
   // Get all children (descendants) that should move with this node
   d._childrenToMove = getTreeDescendants(d.id);
@@ -1360,10 +1359,7 @@ function treeDragStarted(event, d) {
   d._childrenToMove.forEach(childId => {
     const childNode = state.nodes.find(n => n.id === childId);
     if (childNode) {
-      const childEl = d3.select(`.node`).filter(function(n) { return n.id === childId; });
-      const childTransform = childEl.attr('transform');
-      const childMatch = childTransform ? childTransform.match(/translate\(([^,]+),\s*([^)]+)\)/) : null;
-      d._initialPositions[childId] = childMatch ? parseFloat(childMatch[2]) : (childNode.treeY || childNode.y || 0);
+      d._initialPositions[childId] = childNode.treeY || childNode.tree_y || childNode.y || 0;
     }
   });
   
@@ -1372,13 +1368,10 @@ function treeDragStarted(event, d) {
   state.pushPositionHistory({
     nodes: allNodeIds.map(nid => {
       const node = state.nodes.find(n => n.id === nid);
-      return { id: nid, tree_y: node?.treeY || node?.tree_y || d._initialPositions[nid] };
+      return { id: nid, tree_y: d._initialPositions[nid] };
     })
   });
   updateUndoButton();
-  
-  // Store the offset between mouse and node center
-  d._dragOffsetY = event.y - d._dragStartTreeY;
   
   state.isDragging = true;
 }
@@ -1386,12 +1379,14 @@ function treeDragStarted(event, d) {
 function treeDragged(event, d) {
   if (!state.isAdmin) return;
   
-  // Calculate new Y position (accounting for initial offset)
-  const newY = event.y - (d._dragOffsetY || 0);
+  // With subject defined, event.y is the new Y position directly
+  const newY = event.y;
+  
+  // Calculate delta from starting position
   const deltaY = newY - d._dragStartTreeY;
   
   // Keep X fixed (level column)
-  const fixedX = d._dragStartTreeX || d.treeX || d.x;
+  const fixedX = d._dragStartTreeX;
   
   // Update main node data
   d.treeY = newY;
@@ -1405,7 +1400,7 @@ function treeDragged(event, d) {
     d._childrenToMove.forEach(childId => {
       const childNode = state.nodes.find(n => n.id === childId);
       if (childNode) {
-        const initialY = d._initialPositions[childId] || childNode.treeY || childNode.y;
+        const initialY = d._initialPositions[childId];
         const childNewY = initialY + deltaY;
         
         childNode.treeY = childNewY;
@@ -1428,7 +1423,7 @@ function treeDragEnded(event, d) {
   state.isDragging = false;
   
   // Clean up temporary drag properties
-  delete d._dragOffsetY;
+  delete d._dragStartMouseY;
   delete d._dragStartTreeX;
   delete d._dragStartTreeY;
   delete d._childrenToMove;
@@ -1516,7 +1511,7 @@ function updateAllTreeLinks() {
     }
     
     // Move all label text elements
-    group.selectAll('.link-label').each(function(_, i) {
+    group.selectAll('.link-label').each(function() {
       const label = d3.select(this);
       const dy = parseFloat(label.attr('data-dy')) || 0;
       label.attr('x', newMidX).attr('y', newMidY + dy);
