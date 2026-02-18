@@ -115,6 +115,17 @@ body {
 }
 #levelToggleBtn:hover { background: #2980b9; }
 
+#separatorToggleBtn {
+  background: #95a5a6;
+  font-size: 11px;
+}
+#separatorToggleBtn:hover { background: #7f8c8d; }
+
+/* Group Separator Lines */
+.group-separator {
+  pointer-events: none;
+}
+
 /* Layout Toggle Buttons */
 .layout-toggle {
   display: flex;

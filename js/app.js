@@ -204,6 +204,18 @@ window.toggleLevelHeaders = function() {
   showToast(`Level headers ${state.showLevelHeaders ? 'visible' : 'hidden'}`, 'info');
 };
 
+// Separator lines toggle
+window.toggleSeparatorLines = function() {
+  state.setShowSeparatorLines(!state.showSeparatorLines);
+  const btn = document.getElementById('separatorToggleBtn');
+  if (btn) {
+    btn.style.background = state.showSeparatorLines ? '#3498db' : '#95a5a6';
+    btn.title = state.showSeparatorLines ? 'Hide Group Separators' : 'Show Group Separators';
+  }
+  renderGraph();
+  showToast(`Separator lines ${state.showSeparatorLines ? 'visible' : 'hidden'}`, 'info');
+};
+
 // Layout mode toggle (Force / Tree)
 window.setLayoutMode = function(mode) {
   state.setLayoutMode(mode);

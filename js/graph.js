@@ -529,7 +529,7 @@ function drawShape(selection, shapeType, width, height, fill, stroke, isMultiPar
 }
 
 // ============================================================
-// TREE LAYOUT CALCULATION - Improved Edge Crossing Minimization
+// TREE LAYOUT CALCULATION - Improved Centering & Groups
 // ============================================================
 function calculateTreeLayout(nodes, links) {
   // Group nodes by level
@@ -547,7 +547,8 @@ function calculateTreeLayout(nodes, links) {
   const nodeWidth = 140;
   const nodeHeight = 45;
   const horizontalGap = 200;
-  const verticalGap = 70;
+  const verticalGap = 65;
+  const groupGap = 40;  // Extra gap between groups
   const headerHeight = 50;
   const leftPadding = 120;
   const topPadding = 80;
@@ -556,8 +557,8 @@ function calculateTreeLayout(nodes, links) {
   const levels = Object.keys(levelGroups).map(Number).sort((a, b) => b - a);
   
   // Build connection maps
-  const childToParents = {};  // child_id -> [parent_ids]
-  const parentToChildren = {}; // parent_id -> [child_ids]
+  const childToParents = {};
+  const parentToChildren = {};
   
   links.forEach(link => {
     if (!childToParents[link.child_id]) childToParents[link.child_id] = [];
@@ -569,8 +570,11 @@ function calculateTreeLayout(nodes, links) {
   // Initialize positions
   const treePositions = {};
   
-  // Check if any node has stored tree_y - if so, use stored positions
+  // Check if any node has stored tree_y
   const hasStoredPositions = nodes.some(n => n.tree_y != null);
+  
+  // Detect groups based on L2 nodes (main branches)
+  const groups = detectGroups(nodes, links, childToParents, parentToChildren);
   
   if (hasStoredPositions) {
     // Use stored positions
@@ -588,74 +592,134 @@ function calculateTreeLayout(nodes, links) {
       });
     });
   } else {
-    // Use improved auto-layout algorithm
+    // Improved auto-layout: Position groups separately, then center
     
-    // Step 1: Initial positioning - start from L1 (rightmost), work left
-    const reversedLevels = [...levels].reverse();
+    // Step 1: Assign nodes to groups
+    const nodeToGroup = {};
+    groups.forEach((group, groupIdx) => {
+      group.nodeIds.forEach(nid => {
+        nodeToGroup[nid] = groupIdx;
+      });
+    });
     
-    reversedLevels.forEach((level, reverseIdx) => {
+    // Step 2: Initial column X positions
+    levels.forEach((level, colIndex) => {
       const nodesInLevel = levelGroups[level];
-      const colIndex = levels.indexOf(level);
       const columnX = leftPadding + colIndex * horizontalGap;
       
-      // Initial sort by sequence number
-      nodesInLevel.sort((a, b) => (a.sequence_num || 9999) - (b.sequence_num || 9999));
-      
-      // Position nodes
-      nodesInLevel.forEach((node, rowIndex) => {
+      nodesInLevel.forEach(node => {
         treePositions[node.id] = {
           x: columnX,
-          y: topPadding + headerHeight + rowIndex * verticalGap,
+          y: 0, // Will be set later
           treeWidth: nodeWidth - 20,
-          treeHeight: nodeHeight - 10
+          treeHeight: nodeHeight - 10,
+          group: nodeToGroup[node.id] ?? 0
         };
       });
     });
     
-    // Step 2: Barycenter method - multiple passes to minimize crossings
-    const NUM_ITERATIONS = 4;
+    // Step 3: Position each group separately using recursive centering
+    let groupStartY = topPadding + headerHeight;
     
-    for (let iter = 0; iter < NUM_ITERATIONS; iter++) {
-      // Forward pass (L1 to highest level) - position based on children
-      for (let i = 1; i < levels.length; i++) {
-        const level = levels[i];
-        const nodesInLevel = levelGroups[level];
+    groups.forEach((group, groupIdx) => {
+      // Get all nodes in this group, organized by level
+      const groupNodesByLevel = {};
+      levels.forEach(level => {
+        groupNodesByLevel[level] = levelGroups[level].filter(n => 
+          group.nodeIds.has(n.id)
+        );
+      });
+      
+      // Position from leftmost level (highest) to rightmost (L1)
+      // But calculate sizes from right to left first
+      const levelHeights = {};
+      
+      // Calculate required height for each level in this group
+      [...levels].reverse().forEach(level => {
+        const nodesInLevel = groupNodesByLevel[level] || [];
+        if (nodesInLevel.length === 0) {
+          levelHeights[level] = 0;
+          return;
+        }
         
-        // Calculate barycenter for each node
+        // Sort by sequence number within group
+        nodesInLevel.sort((a, b) => (a.sequence_num || 9999) - (b.sequence_num || 9999));
+        
+        // Check if these nodes have children (to the left)
+        let totalHeight = 0;
         nodesInLevel.forEach(node => {
-          const parents = childToParents[node.id] || [];
-          if (parents.length > 0) {
-            // Get Y positions of all connected parents (nodes to the right)
-            const parentYs = parents
-              .filter(pid => treePositions[pid])
-              .map(pid => treePositions[pid].y);
-            
-            if (parentYs.length > 0) {
-              // Position at barycenter (average) of parents
-              const avgY = parentYs.reduce((sum, y) => sum + y, 0) / parentYs.length;
-              treePositions[node.id].barycenter = avgY;
-            }
+          const children = parentToChildren[node.id] || [];
+          const childrenInGroup = children.filter(cid => group.nodeIds.has(cid));
+          
+          if (childrenInGroup.length > 0) {
+            // This node needs space for its children
+            const childYs = childrenInGroup.map(cid => treePositions[cid]?.y || 0);
+            const childMin = Math.min(...childYs);
+            const childMax = Math.max(...childYs);
+            const childSpan = childMax - childMin + verticalGap;
+            totalHeight = Math.max(totalHeight, childSpan);
+          } else {
+            totalHeight += verticalGap;
           }
         });
         
-        // Sort by barycenter
-        nodesInLevel.sort((a, b) => {
-          const bcA = treePositions[a.id].barycenter ?? 9999;
-          const bcB = treePositions[b.id].barycenter ?? 9999;
-          if (bcA !== bcB) return bcA - bcB;
-          return (a.sequence_num || 9999) - (b.sequence_num || 9999);
+        levelHeights[level] = Math.max(nodesInLevel.length * verticalGap, totalHeight);
+      });
+      
+      // Now position nodes from highest level to L1
+      levels.forEach(level => {
+        const nodesInLevel = groupNodesByLevel[level] || [];
+        if (nodesInLevel.length === 0) return;
+        
+        // Sort by sequence number
+        nodesInLevel.sort((a, b) => (a.sequence_num || 9999) - (b.sequence_num || 9999));
+        
+        nodesInLevel.forEach((node, idx) => {
+          const children = parentToChildren[node.id] || [];
+          const childrenInGroup = children.filter(cid => group.nodeIds.has(cid));
+          
+          if (childrenInGroup.length > 0 && childrenInGroup.some(cid => treePositions[cid]?.y > 0)) {
+            // Center this node among its children
+            const childYs = childrenInGroup.map(cid => treePositions[cid].y);
+            const minChildY = Math.min(...childYs);
+            const maxChildY = Math.max(...childYs);
+            treePositions[node.id].y = (minChildY + maxChildY) / 2;
+          } else {
+            // Position sequentially
+            treePositions[node.id].y = groupStartY + idx * verticalGap;
+          }
         });
         
-        // Reassign Y positions maintaining order
-        spreadNodesInLevel(nodesInLevel, treePositions, topPadding + headerHeight, verticalGap);
-      }
+        // Ensure no overlaps within this level for this group
+        nodesInLevel.sort((a, b) => treePositions[a.id].y - treePositions[b.id].y);
+        let lastY = groupStartY - verticalGap;
+        nodesInLevel.forEach(node => {
+          if (treePositions[node.id].y < lastY + verticalGap) {
+            treePositions[node.id].y = lastY + verticalGap;
+          }
+          lastY = treePositions[node.id].y;
+        });
+      });
       
-      // Backward pass (highest level to L1) - position based on children (nodes to the left)
-      for (let i = levels.length - 2; i >= 0; i--) {
-        const level = levels[i];
-        const nodesInLevel = levelGroups[level];
+      // Calculate actual group bounds after positioning
+      const groupNodes = nodes.filter(n => group.nodeIds.has(n.id));
+      const groupYs = groupNodes.map(n => treePositions[n.id].y);
+      const groupMaxY = Math.max(...groupYs);
+      
+      // Store group bounds for separator lines
+      group.minY = groupStartY;
+      group.maxY = groupMaxY;
+      
+      // Next group starts after this one plus gap
+      groupStartY = groupMaxY + verticalGap + groupGap;
+    });
+    
+    // Step 4: Final centering pass - adjust parents to center of children
+    for (let pass = 0; pass < 3; pass++) {
+      [...levels].reverse().forEach(level => {
+        if (level === levels[levels.length - 1]) return; // Skip highest level
         
-        // Calculate barycenter based on children
+        const nodesInLevel = levelGroups[level];
         nodesInLevel.forEach(node => {
           const children = parentToChildren[node.id] || [];
           if (children.length > 0) {
@@ -664,55 +728,36 @@ function calculateTreeLayout(nodes, links) {
               .map(cid => treePositions[cid].y);
             
             if (childYs.length > 0) {
-              const avgY = childYs.reduce((sum, y) => sum + y, 0) / childYs.length;
-              // Blend with current position (don't move too much)
-              const currentY = treePositions[node.id].y;
-              treePositions[node.id].barycenter = (currentY + avgY) / 2;
+              const centerY = (Math.min(...childYs) + Math.max(...childYs)) / 2;
+              treePositions[node.id].y = centerY;
             }
           }
         });
         
-        // Sort by barycenter
-        nodesInLevel.sort((a, b) => {
-          const bcA = treePositions[a.id].barycenter ?? treePositions[a.id].y;
-          const bcB = treePositions[b.id].barycenter ?? treePositions[b.id].y;
-          return bcA - bcB;
-        });
-        
-        // Reassign Y positions
-        spreadNodesInLevel(nodesInLevel, treePositions, topPadding + headerHeight, verticalGap);
-      }
-    }
-    
-    // Step 3: Final centering pass - center parents among their children
-    for (let i = levels.length - 2; i >= 0; i--) {
-      const level = levels[i];
-      const nodesInLevel = levelGroups[level];
-      
-      nodesInLevel.forEach(node => {
-        const children = parentToChildren[node.id] || [];
-        if (children.length > 0) {
-          const childYs = children
-            .filter(cid => treePositions[cid])
-            .map(cid => treePositions[cid].y);
-          
-          if (childYs.length > 0) {
-            const minY = Math.min(...childYs);
-            const maxY = Math.max(...childYs);
-            const centerY = (minY + maxY) / 2;
-            treePositions[node.id].targetY = centerY;
+        // Fix any overlaps
+        nodesInLevel.sort((a, b) => treePositions[a.id].y - treePositions[b.id].y);
+        let lastY = topPadding + headerHeight - verticalGap;
+        nodesInLevel.forEach(node => {
+          if (treePositions[node.id].y < lastY + verticalGap) {
+            treePositions[node.id].y = lastY + verticalGap;
           }
-        }
+          lastY = treePositions[node.id].y;
+        });
       });
-      
-      // Sort by target Y and respread
-      nodesInLevel.sort((a, b) => {
-        const tA = treePositions[a.id].targetY ?? treePositions[a.id].y;
-        const tB = treePositions[b.id].targetY ?? treePositions[b.id].y;
-        return tA - tB;
-      });
-      
-      spreadNodesInLevel(nodesInLevel, treePositions, topPadding + headerHeight, verticalGap);
+    }
+  }
+  
+  // Calculate separator line positions between groups
+  const separatorLines = [];
+  for (let i = 0; i < groups.length - 1; i++) {
+    const group1Nodes = nodes.filter(n => groups[i].nodeIds.has(n.id));
+    const group2Nodes = nodes.filter(n => groups[i + 1].nodeIds.has(n.id));
+    
+    if (group1Nodes.length > 0 && group2Nodes.length > 0) {
+      const group1MaxY = Math.max(...group1Nodes.map(n => treePositions[n.id]?.y || 0));
+      const group2MinY = Math.min(...group2Nodes.map(n => treePositions[n.id]?.y || 0));
+      const separatorY = (group1MaxY + group2MinY) / 2;
+      separatorLines.push(separatorY);
     }
   }
   
@@ -727,39 +772,99 @@ function calculateTreeLayout(nodes, links) {
     levels: levels,
     levelGroups: levelGroups,
     dimensions: { width: totalWidth, height: totalHeight },
-    settings: { horizontalGap, leftPadding, topPadding, headerHeight, nodeWidth }
+    settings: { horizontalGap, leftPadding, topPadding, headerHeight, nodeWidth },
+    separatorLines: separatorLines,
+    groups: groups
   };
 }
 
-// Helper: Spread nodes in a level to avoid overlaps
+// Detect groups based on branches from L2 nodes
+function detectGroups(nodes, links, childToParents, parentToChildren) {
+  const groups = [];
+  const visited = new Set();
+  
+  // Find L2 nodes (or L3 if no L2) - these are our group roots
+  const l2Nodes = nodes.filter(n => n.level === 2);
+  const groupRoots = l2Nodes.length > 0 ? l2Nodes : nodes.filter(n => n.level === 3);
+  
+  // If no clear group roots, treat everything as one group
+  if (groupRoots.length === 0) {
+    groups.push({
+      rootId: null,
+      nodeIds: new Set(nodes.map(n => n.id))
+    });
+    return groups;
+  }
+  
+  // Sort group roots by sequence number
+  groupRoots.sort((a, b) => (a.sequence_num || 9999) - (b.sequence_num || 9999));
+  
+  // For each group root, find all its descendants (children)
+  groupRoots.forEach(root => {
+    if (visited.has(root.id)) return;
+    
+    const group = {
+      rootId: root.id,
+      nodeIds: new Set()
+    };
+    
+    // BFS to find all descendants
+    const queue = [root.id];
+    while (queue.length > 0) {
+      const nodeId = queue.shift();
+      if (group.nodeIds.has(nodeId)) continue;
+      
+      group.nodeIds.add(nodeId);
+      visited.add(nodeId);
+      
+      // Add children (nodes that feed into this one)
+      const children = parentToChildren[nodeId] || [];
+      children.forEach(cid => {
+        if (!group.nodeIds.has(cid)) {
+          queue.push(cid);
+        }
+      });
+    }
+    
+    // Also include the parents of the root (L1 node)
+    const parents = childToParents[root.id] || [];
+    parents.forEach(pid => {
+      group.nodeIds.add(pid);
+      visited.add(pid);
+    });
+    
+    if (group.nodeIds.size > 0) {
+      groups.push(group);
+    }
+  });
+  
+  // Add any unvisited nodes to the last group or create new one
+  const unvisited = nodes.filter(n => !visited.has(n.id));
+  if (unvisited.length > 0) {
+    if (groups.length > 0) {
+      unvisited.forEach(n => groups[groups.length - 1].nodeIds.add(n.id));
+    } else {
+      groups.push({
+        rootId: null,
+        nodeIds: new Set(unvisited.map(n => n.id))
+      });
+    }
+  }
+  
+  return groups;
+}
+
+// Helper: Spread nodes in a level to avoid overlaps (legacy, kept for compatibility)
 function spreadNodesInLevel(nodesInLevel, treePositions, startY, gap) {
   let currentY = startY;
   
   nodesInLevel.forEach((node, idx) => {
     const pos = treePositions[node.id];
-    
-    // If this node should be at its barycenter/target, try to get close
     const targetY = pos.targetY ?? pos.barycenter ?? currentY;
-    
-    // But ensure no overlap with previous node
     const newY = Math.max(targetY, currentY);
     pos.y = newY;
-    
     currentY = newY + gap;
   });
-  
-  // Center the whole group
-  const minY = Math.min(...nodesInLevel.map(n => treePositions[n.id].y));
-  const maxY = Math.max(...nodesInLevel.map(n => treePositions[n.id].y));
-  const totalHeight = maxY - minY;
-  const centerOffset = (startY + totalHeight / 2) - ((minY + maxY) / 2);
-  
-  // Only center if it doesn't push nodes too high
-  if (minY + centerOffset >= startY) {
-    nodesInLevel.forEach(node => {
-      treePositions[node.id].y += centerOffset;
-    });
-  }
 }
 
 // ============================================================
@@ -889,6 +994,25 @@ export function renderGraph() {
         .attr('font-size', '14px')
         .attr('font-weight', '600')
         .text(`L${level}`);
+    });
+  }
+  
+  // Render separator lines between groups if in tree mode and enabled
+  if (isTreeMode && treeLayout && state.showSeparatorLines && treeLayout.separatorLines) {
+    const { dimensions, settings } = treeLayout;
+    const totalWidth = dimensions.width;
+    
+    treeLayout.separatorLines.forEach(separatorY => {
+      g.append('line')
+        .attr('class', 'group-separator')
+        .attr('x1', 20)
+        .attr('y1', separatorY)
+        .attr('x2', totalWidth - 20)
+        .attr('y2', separatorY)
+        .attr('stroke', '#bdc3c7')
+        .attr('stroke-width', 1)
+        .attr('stroke-dasharray', '8,4')
+        .attr('opacity', 0.7);
     });
   }
   
@@ -1208,35 +1332,58 @@ function setupNodeInteractions(nodeElements, isTreeMode = false) {
 function treeDragStarted(event, d) {
   if (!state.isAdmin) return;
   
+  // Get current visual position from the transform
+  const currentTransform = d3.select(this).attr('transform');
+  const match = currentTransform.match(/translate\(([^,]+),\s*([^)]+)\)/);
+  
+  if (match) {
+    d._dragStartTreeX = parseFloat(match[1]);
+    d._dragStartTreeY = parseFloat(match[2]);
+  } else {
+    d._dragStartTreeX = d.treeX || d.x || 0;
+    d._dragStartTreeY = d.treeY || d.tree_y || d.y || 0;
+  }
+  
   // Save position for undo
   state.pushPositionHistory({
-    nodes: [{ id: d.id, tree_y: d.tree_y || d.treeY }]
+    nodes: [{ id: d.id, tree_y: d._dragStartTreeY }]
   });
   updateUndoButton();
   
-  d._dragStartY = event.y;
-  d._originalTreeY = d.treeY || d.tree_y || event.y;
+  // Store the offset between mouse and node center
+  d._dragOffsetY = event.y - d._dragStartTreeY;
+  
   state.isDragging = true;
 }
 
 function treeDragged(event, d) {
   if (!state.isAdmin) return;
   
-  // Only move vertically
-  const newY = event.y;
+  // Calculate new Y position (accounting for initial offset)
+  const newY = event.y - (d._dragOffsetY || 0);
+  
+  // Keep X fixed (level column)
+  const fixedX = d._dragStartTreeX || d.treeX || d.x;
+  
+  // Update node data
   d.treeY = newY;
-  d.tree_y = newY;  // Update for saving
+  d.tree_y = newY;
   
   // Update node position visually
-  d3.select(this).attr('transform', `translate(${d.treeX}, ${newY})`);
+  d3.select(this).attr('transform', `translate(${fixedX}, ${newY})`);
   
   // Update connected links
-  updateLinksForNode(d);
+  updateLinksForNode(d, fixedX, newY);
 }
 
 function treeDragEnded(event, d) {
   if (!state.isAdmin) return;
   state.isDragging = false;
+  
+  // Clean up temporary drag properties
+  delete d._dragOffsetY;
+  delete d._dragStartTreeX;
+  delete d._dragStartTreeY;
   
   // Mark as needing save
   const saveBtn = document.getElementById('saveBtn');
@@ -1246,7 +1393,7 @@ function treeDragEnded(event, d) {
   }
 }
 
-function updateLinksForNode(movedNode) {
+function updateLinksForNode(movedNode, nodeX, nodeY) {
   // Update all links connected to this node
   d3.selectAll('.link-group').each(function() {
     const group = d3.select(this);
@@ -1262,30 +1409,45 @@ function updateLinksForNode(movedNode) {
       const target = state.nodes.find(n => n.id === linkData.parent_id);
       
       if (source && target) {
-        const sx = source.treeX + (source.treeWidth || 60) / 2;
-        const sy = source.treeY;
-        const tx = target.treeX - (target.treeWidth || 60) / 2;
-        const ty = target.treeY;
+        // Get current positions
+        let sourceX, sourceY, targetX, targetY;
+        
+        if (source.id === movedNode.id) {
+          sourceX = nodeX;
+          sourceY = nodeY;
+          targetX = target.treeX || target.x;
+          targetY = target.treeY || target.tree_y || target.y;
+        } else {
+          sourceX = source.treeX || source.x;
+          sourceY = source.treeY || source.tree_y || source.y;
+          targetX = nodeX;
+          targetY = nodeY;
+        }
+        
+        const sourceW = source.treeWidth || 60;
+        const targetW = target.treeWidth || 60;
+        
+        const sx = sourceX + sourceW / 2;
+        const sy = sourceY;
+        const tx = targetX - targetW / 2;
+        const ty = targetY;
         const midX = (sx + tx) / 2;
         
-        // Update path
+        // Update path with smooth curve
         path.attr('d', `M ${sx} ${sy} C ${midX} ${sy}, ${midX} ${ty}, ${tx} ${ty}`);
         
         // Update label position
-        const labelBg = group.select('.link-label-bg');
-        const labels = group.selectAll('.link-label');
-        const newMidX = (source.treeX + target.treeX) / 2;
+        const newMidX = (sourceX + targetX) / 2;
         const newMidY = (sy + ty) / 2;
         
+        const labelBg = group.select('.link-label-bg');
         if (labelBg.size()) {
-          const width = parseFloat(labelBg.attr('width'));
-          const height = parseFloat(labelBg.attr('height'));
+          const width = parseFloat(labelBg.attr('width')) || 30;
+          const height = parseFloat(labelBg.attr('height')) || 20;
           labelBg.attr('x', newMidX - width / 2).attr('y', newMidY - height / 2);
         }
         
-        labels.each(function(_, i) {
-          d3.select(this).attr('x', newMidX);
-        });
+        group.selectAll('.link-label').attr('x', newMidX);
       }
     }
   });

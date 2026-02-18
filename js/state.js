@@ -137,3 +137,10 @@ export function setShowSequenceNumbers(value) {
 export function setShowLevelHeaders(value) {
   showLevelHeaders = value;
 }
+
+// Separator lines between groups
+export let showSeparatorLines = false;
+
+export function setShowSeparatorLines(value) {
+  showSeparatorLines = value;
+}

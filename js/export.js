@@ -230,6 +230,12 @@ function getEmbeddedStyles() {
       font-size: 14px;
       font-weight: 600;
     }
+    .group-separator {
+      stroke: #bdc3c7;
+      stroke-width: 1;
+      stroke-dasharray: 8,4;
+      opacity: 0.7;
+    }
     ${fontSizeStyles}
   `;
 }
