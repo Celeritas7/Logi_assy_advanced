@@ -314,12 +314,28 @@ export async function unlockAllNodes() {
 export async function saveAllPositions() {
   if (!state.isAdmin) return;
   
+  const isTreeMode = state.currentLayoutMode === 'tree';
+  
   try {
     for (const node of state.nodes) {
-      await db.from('logi_nodes').update({
+      const updateData = {
         x: node.x,
         y: node.y
-      }).eq('id', node.id);
+      };
+      
+      // Also save tree_y if in tree mode or if it exists
+      if (isTreeMode && (node.treeY != null || node.tree_y != null)) {
+        updateData.tree_y = node.treeY || node.tree_y;
+      }
+      
+      await db.from('logi_nodes').update(updateData).eq('id', node.id);
+    }
+    
+    // Reset save button
+    const saveBtn = document.getElementById('saveBtn');
+    if (saveBtn) {
+      saveBtn.style.background = '#27ae60';
+      saveBtn.textContent = '💾 Save';
     }
     
     showToast('Positions saved', 'success');

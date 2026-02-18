@@ -405,11 +405,15 @@ svg { display: block; }
    TREE MODE STYLES
    ============================================ */
 .node.tree-mode {
-  cursor: default;
+  cursor: ns-resize;  /* Vertical drag cursor */
 }
 
 .node.tree-mode .node-shape {
   transition: none;
+}
+
+.node.tree-mode:hover .node-shape {
+  filter: brightness(0.95);
 }
 
 .level-header-bg {
