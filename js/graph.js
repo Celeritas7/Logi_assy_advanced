@@ -1379,11 +1379,13 @@ function treeDragStarted(event, d) {
 function treeDragged(event, d) {
   if (!state.isAdmin) return;
   
-  // With subject defined, event.y is the new Y position directly
-  const newY = event.y;
+  // Dampening factor to reduce sensitivity (lower = slower movement)
+  // 0.25 = 25% of mouse movement speed
+  const DRAG_SENSITIVITY = 0.25;
   
-  // Calculate delta from starting position
-  const deltaY = newY - d._dragStartTreeY;
+  const rawDeltaY = event.y - d._dragStartTreeY;
+  const dampenedDeltaY = rawDeltaY * DRAG_SENSITIVITY;
+  const newY = d._dragStartTreeY + dampenedDeltaY;
   
   // Keep X fixed (level column)
   const fixedX = d._dragStartTreeX;
@@ -1401,7 +1403,7 @@ function treeDragged(event, d) {
       const childNode = state.nodes.find(n => n.id === childId);
       if (childNode) {
         const initialY = d._initialPositions[childId];
-        const childNewY = initialY + deltaY;
+        const childNewY = initialY + dampenedDeltaY;
         
         childNode.treeY = childNewY;
         childNode.tree_y = childNewY;
