@@ -967,7 +967,7 @@ export function renderGraph() {
   
   // Render level headers if in tree mode and enabled
   if (isTreeMode && treeLayout && state.showLevelHeaders) {
-    const { levels, settings, levelGroups } = treeLayout;
+    const { levels, settings } = treeLayout;
     const { horizontalGap, leftPadding, topPadding } = settings;
     
     levels.forEach((level, colIndex) => {
@@ -1001,24 +1001,28 @@ export function renderGraph() {
         .attr('font-weight', '600')
         .text(`L${level}`);
       
-      // Add drag behavior for admin to move all nodes in this level
+      // Add drag behavior for admin to move all nodes in this level ONLY
       if (state.isAdmin) {
+        const thisLevel = level; // Capture level in closure
+        
         const levelDrag = d3.drag()
           .on('start', function(event) {
-            // Store initial Y positions of all nodes in this level
-            const nodesInLevel = levelGroups[level] || [];
+            // Get ONLY nodes in THIS specific level from state.nodes
+            const nodesInThisLevel = state.nodes.filter(n => n.level === thisLevel);
+            
             d3.select(this).attr('data-drag-start-y', event.y);
             
-            // Store initial positions
+            // Store initial positions for ONLY this level's nodes
             const initialPositions = {};
-            nodesInLevel.forEach(node => {
+            nodesInThisLevel.forEach(node => {
               initialPositions[node.id] = node.treeY || node.tree_y || node.y || 0;
             });
             d3.select(this).attr('data-initial-positions', JSON.stringify(initialPositions));
+            d3.select(this).attr('data-node-ids', JSON.stringify(nodesInThisLevel.map(n => n.id)));
             
             // Save for undo
             state.pushPositionHistory({
-              nodes: nodesInLevel.map(n => ({ 
+              nodes: nodesInThisLevel.map(n => ({ 
                 id: n.id, 
                 tree_y: n.treeY || n.tree_y || n.y 
               }))
@@ -1028,25 +1032,28 @@ export function renderGraph() {
           .on('drag', function(event) {
             const startY = parseFloat(d3.select(this).attr('data-drag-start-y'));
             const initialPositions = JSON.parse(d3.select(this).attr('data-initial-positions') || '{}');
+            const nodeIds = JSON.parse(d3.select(this).attr('data-node-ids') || '[]');
             
             // Dampening factor
             const DRAG_SENSITIVITY = 0.25;
             const rawDeltaY = event.y - startY;
             const deltaY = rawDeltaY * DRAG_SENSITIVITY;
             
-            // Move all nodes in this level
-            const nodesInLevel = levelGroups[level] || [];
-            nodesInLevel.forEach(node => {
-              const initialY = initialPositions[node.id] || 0;
-              const newY = initialY + deltaY;
-              
-              node.treeY = newY;
-              node.tree_y = newY;
-              
-              // Update node visual position
-              d3.selectAll('.node')
-                .filter(n => n.id === node.id)
-                .attr('transform', `translate(${node.treeX || node.x}, ${newY})`);
+            // Move ONLY the nodes that were captured at drag start (this level only)
+            nodeIds.forEach(nodeId => {
+              const node = state.nodes.find(n => n.id === nodeId);
+              if (node) {
+                const initialY = initialPositions[nodeId] || 0;
+                const newY = initialY + deltaY;
+                
+                node.treeY = newY;
+                node.tree_y = newY;
+                
+                // Update node visual position
+                d3.selectAll('.node')
+                  .filter(n => n.id === nodeId)
+                  .attr('transform', `translate(${node.treeX || node.x}, ${newY})`);
+              }
             });
             
             // Update all links
@@ -1056,6 +1063,7 @@ export function renderGraph() {
             // Clean up
             d3.select(this).attr('data-drag-start-y', null);
             d3.select(this).attr('data-initial-positions', null);
+            d3.select(this).attr('data-node-ids', null);
             
             // Mark as needing save
             const saveBtn = document.getElementById('saveBtn');
