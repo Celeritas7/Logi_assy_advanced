@@ -7,103 +7,12 @@ import {
   FASTENER_COLORS
 } from './config.js';
 import * as state from './state.js';
-import { showToast, closeAllDropdowns, showModal, hideModal } from './ui.js';
-
-// ============================================================
-// EXPORT OPTIONS MODAL
-// ============================================================
-export function showExportOptions(format = 'png') {
-  closeAllDropdowns();
-  
-  const modalContent = `
-    <div class="form-group">
-      <label class="form-label">Scale</label>
-      <select class="form-input" id="exportScale">
-        <option value="1">1x (Standard)</option>
-        <option value="1.5">1.5x (Medium)</option>
-        <option value="2" selected>2x (High Quality)</option>
-        <option value="3">3x (Print Quality)</option>
-      </select>
-    </div>
-    <div class="form-group">
-      <label class="form-label">Padding (px)</label>
-      <input type="number" class="form-input" id="exportPadding" value="40" min="0" max="200">
-    </div>
-    <div class="form-group" style="display: flex; align-items: center; gap: 8px;">
-      <input type="checkbox" id="exportAutoFit" checked>
-      <label for="exportAutoFit">Auto-fit to content</label>
-    </div>
-  `;
-  
-  showModal(
-    `Export as ${format.toUpperCase()}`,
-    modalContent,
-    [
-      { label: 'Cancel', class: 'btn-secondary', action: hideModal },
-      { 
-        label: 'Export', 
-        class: 'btn-primary', 
-        action: () => {
-          const scale = parseFloat(document.getElementById('exportScale').value);
-          const padding = parseInt(document.getElementById('exportPadding').value) || 40;
-          const autoFit = document.getElementById('exportAutoFit').checked;
-          hideModal();
-          
-          if (format === 'png') {
-            downloadPNG(scale, padding, autoFit);
-          } else {
-            downloadSVG(scale, padding, autoFit);
-          }
-        }
-      }
-    ]
-  );
-}
-
-// ============================================================
-// CALCULATE CONTENT BOUNDS
-// ============================================================
-function calculateContentBounds() {
-  const isTreeMode = state.currentLayoutMode === 'tree';
-  
-  let minX = Infinity, minY = Infinity;
-  let maxX = -Infinity, maxY = -Infinity;
-  
-  // Calculate bounds from nodes
-  state.nodes.forEach(node => {
-    const x = isTreeMode ? (node.treeX || node.x || 0) : (node.x || 0);
-    const y = isTreeMode ? (node.treeY || node.tree_y || node.y || 0) : (node.y || 0);
-    const w = isTreeMode ? (node.treeWidth || 120) : (node.width || 160);
-    const h = isTreeMode ? (node.treeHeight || 35) : (node.height || 50);
-    
-    minX = Math.min(minX, x - w/2);
-    minY = Math.min(minY, y - h/2);
-    maxX = Math.max(maxX, x + w/2);
-    maxY = Math.max(maxY, y + h/2);
-  });
-  
-  // Include level headers if visible
-  if (isTreeMode && state.showLevelHeaders) {
-    minY = Math.min(minY, 80); // Top padding for headers
-  }
-  
-  // Handle empty state
-  if (minX === Infinity) {
-    return { x: 0, y: 0, width: 800, height: 600 };
-  }
-  
-  return {
-    x: minX,
-    y: minY,
-    width: maxX - minX,
-    height: maxY - minY
-  };
-}
+import { showToast, closeAllDropdowns } from './ui.js';
 
 // ============================================================
 // DOWNLOAD PNG
 // ============================================================
-export async function downloadPNG(scale = 2, padding = 40, autoFit = true) {
+export async function downloadPNG() {
   closeAllDropdowns();
   
   const svg = document.getElementById('treeSvg');
@@ -118,25 +27,6 @@ export async function downloadPNG(scale = 2, padding = 40, autoFit = true) {
     // Remove collapse indicators and lock icons for clean export
     cleanSvgForExport(clone);
     
-    // Calculate content bounds if auto-fit
-    let exportWidth, exportHeight, viewBox;
-    
-    if (autoFit) {
-      const bounds = calculateContentBounds();
-      exportWidth = bounds.width + padding * 2;
-      exportHeight = bounds.height + padding * 2;
-      viewBox = `${bounds.x - padding} ${bounds.y - padding} ${exportWidth} ${exportHeight}`;
-    } else {
-      exportWidth = svg.clientWidth;
-      exportHeight = svg.clientHeight;
-      viewBox = svg.getAttribute('viewBox') || `0 0 ${exportWidth} ${exportHeight}`;
-    }
-    
-    // Update clone viewBox
-    clone.setAttribute('viewBox', viewBox);
-    clone.setAttribute('width', exportWidth);
-    clone.setAttribute('height', exportHeight);
-    
     // Embed styles
     const styleElement = document.createElementNS('http://www.w3.org/2000/svg', 'style');
     styleElement.textContent = getEmbeddedStyles();
@@ -144,10 +34,8 @@ export async function downloadPNG(scale = 2, padding = 40, autoFit = true) {
     
     // Add white background
     const bg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-    bg.setAttribute('x', autoFit ? (parseFloat(viewBox.split(' ')[0])) : 0);
-    bg.setAttribute('y', autoFit ? (parseFloat(viewBox.split(' ')[1])) : 0);
-    bg.setAttribute('width', exportWidth);
-    bg.setAttribute('height', exportHeight);
+    bg.setAttribute('width', '100%');
+    bg.setAttribute('height', '100%');
     bg.setAttribute('fill', 'white');
     clone.insertBefore(bg, clone.firstChild);
     
@@ -161,14 +49,15 @@ export async function downloadPNG(scale = 2, padding = 40, autoFit = true) {
     const img = new Image();
     img.onload = () => {
       const canvas = document.createElement('canvas');
-      canvas.width = exportWidth * scale;
-      canvas.height = exportHeight * scale;
+      const scale = 2; // Higher resolution
+      canvas.width = svg.clientWidth * scale;
+      canvas.height = svg.clientHeight * scale;
       
       const ctx = canvas.getContext('2d');
       ctx.scale(scale, scale);
       ctx.fillStyle = 'white';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
-      ctx.drawImage(img, 0, 0, exportWidth, exportHeight);
+      ctx.drawImage(img, 0, 0);
       
       // Download
       canvas.toBlob(blob => {
@@ -177,7 +66,7 @@ export async function downloadPNG(scale = 2, padding = 40, autoFit = true) {
         a.download = `${state.currentAssemblyName || 'assembly'}_tree.png`;
         a.click();
         URL.revokeObjectURL(a.href);
-        showToast(`PNG downloaded (${scale}x, ${Math.round(canvas.width)}×${Math.round(canvas.height)}px)`, 'success');
+        showToast('PNG downloaded', 'success');
       }, 'image/png');
       
       URL.revokeObjectURL(url);
@@ -198,7 +87,7 @@ export async function downloadPNG(scale = 2, padding = 40, autoFit = true) {
 // ============================================================
 // DOWNLOAD SVG
 // ============================================================
-export function downloadSVG(scale = 1, padding = 40, autoFit = true) {
+export function downloadSVG() {
   closeAllDropdowns();
   
   const svg = document.getElementById('treeSvg');
@@ -211,37 +100,15 @@ export function downloadSVG(scale = 1, padding = 40, autoFit = true) {
     // Remove collapse indicators and lock icons for clean export
     cleanSvgForExport(clone);
     
-    // Calculate content bounds if auto-fit
-    let exportWidth, exportHeight, viewBox;
-    
-    if (autoFit) {
-      const bounds = calculateContentBounds();
-      exportWidth = (bounds.width + padding * 2) * scale;
-      exportHeight = (bounds.height + padding * 2) * scale;
-      viewBox = `${bounds.x - padding} ${bounds.y - padding} ${bounds.width + padding * 2} ${bounds.height + padding * 2}`;
-    } else {
-      exportWidth = svg.clientWidth * scale;
-      exportHeight = svg.clientHeight * scale;
-      viewBox = svg.getAttribute('viewBox') || `0 0 ${svg.clientWidth} ${svg.clientHeight}`;
-    }
-    
-    // Update clone viewBox and dimensions
-    clone.setAttribute('viewBox', viewBox);
-    clone.setAttribute('width', exportWidth);
-    clone.setAttribute('height', exportHeight);
-    
     // Embed styles
     const styleElement = document.createElementNS('http://www.w3.org/2000/svg', 'style');
     styleElement.textContent = getEmbeddedStyles();
     clone.insertBefore(styleElement, clone.firstChild);
     
     // Add white background
-    const viewBoxParts = viewBox.split(' ').map(Number);
     const bg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-    bg.setAttribute('x', viewBoxParts[0]);
-    bg.setAttribute('y', viewBoxParts[1]);
-    bg.setAttribute('width', viewBoxParts[2]);
-    bg.setAttribute('height', viewBoxParts[3]);
+    bg.setAttribute('width', '100%');
+    bg.setAttribute('height', '100%');
     bg.setAttribute('fill', 'white');
     clone.insertBefore(bg, clone.firstChild);
     
@@ -256,7 +123,7 @@ export function downloadSVG(scale = 1, padding = 40, autoFit = true) {
     a.click();
     URL.revokeObjectURL(a.href);
     
-    showToast(`SVG downloaded (${Math.round(exportWidth)}×${Math.round(exportHeight)})`, 'success');
+    showToast('SVG downloaded', 'success');
   } catch (e) {
     console.error('Error generating SVG:', e);
     showToast('Failed to generate SVG', 'error');

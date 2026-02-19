@@ -967,20 +967,14 @@ export function renderGraph() {
   
   // Render level headers if in tree mode and enabled
   if (isTreeMode && treeLayout && state.showLevelHeaders) {
-    const { levels, settings, levelGroups } = treeLayout;
+    const { levels, settings } = treeLayout;
     const { horizontalGap, leftPadding, topPadding } = settings;
     
     levels.forEach((level, colIndex) => {
       const headerX = leftPadding + colIndex * horizontalGap;
       
-      // Create a group for the header (draggable)
-      const headerGroup = g.append('g')
-        .attr('class', 'level-header-group')
-        .attr('data-level', level)
-        .style('cursor', state.isAdmin ? 'ns-resize' : 'default');
-      
       // Header background
-      headerGroup.append('rect')
+      g.append('rect')
         .attr('class', 'level-header-bg')
         .attr('x', headerX - 50)
         .attr('y', topPadding)
@@ -991,7 +985,7 @@ export function renderGraph() {
         .attr('opacity', 0.9);
       
       // Header text
-      headerGroup.append('text')
+      g.append('text')
         .attr('class', 'level-header-text')
         .attr('x', headerX)
         .attr('y', topPadding + 20)
@@ -1000,73 +994,6 @@ export function renderGraph() {
         .attr('font-size', '14px')
         .attr('font-weight', '600')
         .text(`L${level}`);
-      
-      // Add drag behavior for admin to move all nodes in this level
-      if (state.isAdmin) {
-        const levelDrag = d3.drag()
-          .on('start', function(event) {
-            // Store initial Y positions of all nodes in this level
-            const nodesInLevel = levelGroups[level] || [];
-            d3.select(this).attr('data-drag-start-y', event.y);
-            
-            // Store initial positions
-            const initialPositions = {};
-            nodesInLevel.forEach(node => {
-              initialPositions[node.id] = node.treeY || node.tree_y || node.y || 0;
-            });
-            d3.select(this).attr('data-initial-positions', JSON.stringify(initialPositions));
-            
-            // Save for undo
-            state.pushPositionHistory({
-              nodes: nodesInLevel.map(n => ({ 
-                id: n.id, 
-                tree_y: n.treeY || n.tree_y || n.y 
-              }))
-            });
-            updateUndoButton();
-          })
-          .on('drag', function(event) {
-            const startY = parseFloat(d3.select(this).attr('data-drag-start-y'));
-            const initialPositions = JSON.parse(d3.select(this).attr('data-initial-positions') || '{}');
-            
-            // Dampening factor
-            const DRAG_SENSITIVITY = 0.25;
-            const rawDeltaY = event.y - startY;
-            const deltaY = rawDeltaY * DRAG_SENSITIVITY;
-            
-            // Move all nodes in this level
-            const nodesInLevel = levelGroups[level] || [];
-            nodesInLevel.forEach(node => {
-              const initialY = initialPositions[node.id] || 0;
-              const newY = initialY + deltaY;
-              
-              node.treeY = newY;
-              node.tree_y = newY;
-              
-              // Update node visual position
-              d3.selectAll('.node')
-                .filter(n => n.id === node.id)
-                .attr('transform', `translate(${node.treeX || node.x}, ${newY})`);
-            });
-            
-            // Update all links
-            updateAllTreeLinks();
-          })
-          .on('end', function() {
-            // Clean up
-            d3.select(this).attr('data-drag-start-y', null);
-            d3.select(this).attr('data-initial-positions', null);
-            
-            // Mark as needing save
-            const saveBtn = document.getElementById('saveBtn');
-            if (saveBtn) {
-              saveBtn.style.background = '#e74c3c';
-              saveBtn.textContent = '💾 Save*';
-            }
-          });
-        
-        headerGroup.call(levelDrag);
-      }
     });
   }
   

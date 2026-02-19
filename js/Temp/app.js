@@ -20,7 +20,7 @@ import {
   saveAllPositions, undoPositions, refreshUnlockedNodes
 } from './nodes.js';
 import './links.js'; // Import for side effects (window exports)
-import { downloadPNG, downloadSVG, showExportOptions } from './export.js';
+import { downloadPNG, downloadSVG } from './export.js';
 import './chatbot.js'; // Import chatbot for side effects (window exports)
 import './import.js'; // CSV import functionality
 
@@ -177,8 +177,8 @@ window.unlockAllNodes = unlockAllNodes;
 
 // Export controls
 window.toggleExportDropdown = toggleExportDropdown;
-window.downloadPNG = () => showExportOptions('png');
-window.downloadSVG = () => showExportOptions('svg');
+window.downloadPNG = downloadPNG;
+window.downloadSVG = downloadSVG;
 
 // Sequence number toggle
 window.toggleSequenceNumbers = function() {

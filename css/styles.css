@@ -126,6 +126,17 @@ body {
   pointer-events: none;
 }
 
+/* Draggable Level Headers */
+.level-header-group {
+  transition: opacity 0.15s;
+}
+.level-header-group:hover .level-header-bg {
+  filter: brightness(1.1);
+}
+.level-header-group:active .level-header-bg {
+  filter: brightness(0.9);
+}
+
 /* Layout Toggle Buttons */
 .layout-toggle {
   display: flex;
