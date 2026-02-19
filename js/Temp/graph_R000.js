@@ -577,15 +577,14 @@ function calculateTreeLayout(nodes, links) {
   const groups = detectGroups(nodes, links, childToParents, parentToChildren);
   
   if (hasStoredPositions) {
-    // Use stored Y positions but ALWAYS compute X from horizontalGap
-    // This ensures horizontalGap changes take effect even with saved positions
+    // Use stored positions
     levels.forEach((level, colIndex) => {
       const nodesInLevel = levelGroups[level];
-      const columnX = leftPadding + colIndex * horizontalGap;
+      const defaultColumnX = leftPadding + colIndex * horizontalGap;
       
       nodesInLevel.forEach((node, rowIndex) => {
-        // Always use computed column X (never stored tree_x)
-        const nodeX = columnX;
+        // Use stored tree_x if available, otherwise use default column position
+        const nodeX = node.tree_x != null ? node.tree_x : defaultColumnX;
         const nodeY = node.tree_y != null ? node.tree_y : (topPadding + headerHeight + rowIndex * verticalGap);
         
         treePositions[node.id] = {
@@ -1013,6 +1012,7 @@ export function renderGraph() {
         const levelDrag = d3.drag()
           .on('start', function(event) {
             // Get nodes in THIS level AND all higher levels (children = L4, L5, etc. when dragging L3)
+            // Higher level number = children (further left in the tree)
             const nodesToMove = state.nodes.filter(n => n.level >= thisLevel);
             
             d3.select(this).attr('data-drag-start-x', event.x);
@@ -1054,7 +1054,7 @@ export function renderGraph() {
             const headerPositions = JSON.parse(d3.select(this).attr('data-header-positions') || '{}');
             
             // Dampening factor for smooth control
-            const DRAG_SENSITIVITY = 0.6;
+            const DRAG_SENSITIVITY = 0.25;
             const rawDeltaX = event.x - startX;
             const deltaX = rawDeltaX * DRAG_SENSITIVITY;
             
