@@ -6,7 +6,7 @@ import { db } from './database.js';
 import {
   LEVEL_COLORS, LEVEL_SHAPES, LEVEL_FONT_SIZES, LEVEL_FONT_WEIGHTS,
   GROUP_COLORS, STATUS_COLORS, FASTENER_COLORS, SEQUENCE_BADGES,
-  NODE_WIDTH_BASE, NODE_WIDTH_MAX,
+  NODE_WIDTH_BASE, NODE_WIDTH_MAX, LEVEL_HORIZONTAL_GAPS,
   getLevelColor, getLevelShape, getLevelFontSize, getLevelFontWeight,
   getGroupColor, getStatusColor, getFastenerColor, getSequenceBadge,
   getLevelGap
@@ -567,11 +567,14 @@ function calculateTreeLayout(nodes, links) {
     
     if (colIndex < levels.length - 1) {
       // Gap to next column: based on the lower of the two adjacent levels
-      // e.g. between L4 and L3 columns, use gap index for L3→L4 (index 2)
       const nextLevel = levels[colIndex + 1];
       const lowerLevel = Math.min(level, nextLevel);
       const gapIndex = lowerLevel - 1;  // L1→L2 = index 0, L2→L3 = index 1, etc.
-      cumulativeX += getLevelGap(gapIndex);
+      // Use runtime override from state if available, else config default
+      const gap = (state.levelGaps && state.levelGaps[gapIndex] != null) 
+        ? state.levelGaps[gapIndex] 
+        : getLevelGap(gapIndex);
+      cumulativeX += gap;
     }
   });
   
@@ -1005,16 +1008,16 @@ export function renderGraph() {
       const headerGroup = g.append('g')
         .attr('class', 'level-header-group')
         .attr('data-level', level)
-        .style('cursor', state.isAdmin ? 'ew-resize' : 'default');  // Horizontal cursor
+        .style('cursor', state.isAdmin ? 'ew-resize' : 'default');
       
-      // Header background
+      // Header background - larger hit area
       headerGroup.append('rect')
         .attr('class', 'level-header-bg')
-        .attr('x', headerX - 50)
-        .attr('y', topPadding)
-        .attr('width', 100)
-        .attr('height', 30)
-        .attr('rx', 4)
+        .attr('x', headerX - 55)
+        .attr('y', topPadding - 5)
+        .attr('width', 110)
+        .attr('height', 35)
+        .attr('rx', 6)
         .attr('fill', '#3498db')
         .attr('opacity', 0.9);
       
@@ -1022,12 +1025,18 @@ export function renderGraph() {
       headerGroup.append('text')
         .attr('class', 'level-header-text')
         .attr('x', headerX)
-        .attr('y', topPadding + 20)
+        .attr('y', topPadding + 18)
         .attr('text-anchor', 'middle')
         .attr('fill', 'white')
         .attr('font-size', '14px')
         .attr('font-weight', '600')
-        .text(`L${level}`);
+        .text(`L${level}`)
+        .style('pointer-events', 'none');  // Let clicks pass to bg rect
+      
+      // CRITICAL: Stop zoom from stealing drag events on the header
+      headerGroup
+        .on('mousedown', (event) => event.stopPropagation())
+        .on('touchstart', (event) => event.stopPropagation());
       
       // Add HORIZONTAL drag behavior - moves this level and all children (higher level numbers)
       if (state.isAdmin) {
@@ -1109,7 +1118,7 @@ export function renderGraph() {
                   })
                   .each(function() {
                     d3.select(this).select('.level-header-bg')
-                      .attr('x', newHeaderX - 50);
+                      .attr('x', newHeaderX - 55);
                     d3.select(this).select('.level-header-text')
                       .attr('x', newHeaderX);
                   });
@@ -2104,6 +2113,135 @@ async function saveNodeEdit(nodeId) {
     showToast('Failed to save node', 'error');
   }
 }
+
+// ============================================================
+// SPACING SETTINGS MODAL
+// ============================================================
+function openSpacingSettings() {
+  if (!state.isAdmin) return;
+  
+  // Determine how many levels exist in current assembly
+  const maxLevel = Math.max(1, ...state.nodes.map(n => n.level || 1));
+  const numGaps = Math.max(maxLevel - 1, 1);
+  
+  // Build slider rows for each gap
+  let slidersHtml = '';
+  for (let i = 0; i < numGaps; i++) {
+    const currentGap = (state.levelGaps && state.levelGaps[i] != null)
+      ? state.levelGaps[i]
+      : (LEVEL_HORIZONTAL_GAPS[i] != null ? LEVEL_HORIZONTAL_GAPS[i] : LEVEL_HORIZONTAL_GAPS[LEVEL_HORIZONTAL_GAPS.length - 1]);
+    
+    slidersHtml += `
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+        <label style="min-width:75px;font-weight:600;font-size:13px;color:#333;">
+          L${i + 1} ↔ L${i + 2}
+        </label>
+        <input type="range" id="spacingSlider_${i}" 
+          min="80" max="500" value="${currentGap}" step="10"
+          style="flex:1;cursor:pointer;"
+          oninput="document.getElementById('spacingValue_${i}').value = this.value; window._previewSpacing();">
+        <input type="number" id="spacingValue_${i}" 
+          min="80" max="500" value="${currentGap}" step="10"
+          style="width:60px;text-align:center;padding:4px;border:1px solid #ccc;border-radius:4px;font-size:13px;"
+          oninput="document.getElementById('spacingSlider_${i}').value = this.value; window._previewSpacing();">
+        <span style="font-size:11px;color:#888;">px</span>
+      </div>
+    `;
+  }
+  
+  const content = `
+    <div style="margin-bottom:12px;font-size:12px;color:#666;">
+      Adjust the horizontal gap between each level pair. Changes preview live.
+    </div>
+    <div id="spacingSliders">
+      ${slidersHtml}
+    </div>
+    <div style="margin-top:12px;display:flex;gap:8px;">
+      <button class="btn-secondary" style="padding:6px 12px;font-size:12px;border-radius:4px;cursor:pointer;border:1px solid #ccc;background:#f5f5f5;" 
+        onclick="window._resetSpacingDefaults()">↺ Reset Defaults</button>
+      <button class="btn-secondary" style="padding:6px 12px;font-size:12px;border-radius:4px;cursor:pointer;border:1px solid #ccc;background:#f5f5f5;" 
+        onclick="window._equalizeSpacing()">= Equal Spacing</button>
+    </div>
+  `;
+  
+  showModal('↔️ Level Spacing', content, [
+    { label: 'Cancel', class: 'btn-secondary', action: () => { _revertSpacing(); hideModal(); } },
+    { label: 'Apply', class: 'btn-primary', action: () => { _applySpacing(); hideModal(); } }
+  ]);
+  
+  // Store pre-edit gaps for cancel/revert
+  window._spacingBackup = state.levelGaps ? [...state.levelGaps] : null;
+  window._spacingNumGaps = numGaps;
+}
+
+// Preview spacing live as sliders change
+function _previewSpacing() {
+  const numGaps = window._spacingNumGaps || 1;
+  const gaps = [];
+  
+  for (let i = 0; i < numGaps; i++) {
+    const slider = document.getElementById(`spacingSlider_${i}`);
+    gaps.push(slider ? parseInt(slider.value) : 200);
+  }
+  
+  state.setLevelGaps(gaps);
+  renderGraph();
+}
+
+// Apply and close
+function _applySpacing() {
+  _previewSpacing();  // Ensure latest values are applied
+  showToast('Spacing updated', 'success');
+}
+
+// Revert to backup on cancel
+function _revertSpacing() {
+  state.setLevelGaps(window._spacingBackup);
+  renderGraph();
+}
+
+// Reset to config.js defaults
+function _resetSpacingDefaults() {
+  const numGaps = window._spacingNumGaps || 1;
+  
+  for (let i = 0; i < numGaps; i++) {
+    const defaultVal = LEVEL_HORIZONTAL_GAPS[Math.min(i, LEVEL_HORIZONTAL_GAPS.length - 1)];
+    const slider = document.getElementById(`spacingSlider_${i}`);
+    const input = document.getElementById(`spacingValue_${i}`);
+    if (slider) slider.value = defaultVal;
+    if (input) input.value = defaultVal;
+  }
+  
+  _previewSpacing();
+}
+
+// Set all gaps to the same value
+function _equalizeSpacing() {
+  const numGaps = window._spacingNumGaps || 1;
+  
+  // Use the average of current values
+  let total = 0;
+  for (let i = 0; i < numGaps; i++) {
+    const slider = document.getElementById(`spacingSlider_${i}`);
+    total += slider ? parseInt(slider.value) : 200;
+  }
+  const avg = Math.round(total / numGaps / 10) * 10;  // Round to nearest 10
+  
+  for (let i = 0; i < numGaps; i++) {
+    const slider = document.getElementById(`spacingSlider_${i}`);
+    const input = document.getElementById(`spacingValue_${i}`);
+    if (slider) slider.value = avg;
+    if (input) input.value = avg;
+  }
+  
+  _previewSpacing();
+}
+
+// Export to window
+window.openSpacingSettings = openSpacingSettings;
+window._previewSpacing = _previewSpacing;
+window._resetSpacingDefaults = _resetSpacingDefaults;
+window._equalizeSpacing = _equalizeSpacing;
 
 // ============================================================
 // EXPORTS TO WINDOW

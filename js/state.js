@@ -144,3 +144,14 @@ export let showSeparatorLines = false;
 export function setShowSeparatorLines(value) {
   showSeparatorLines = value;
 }
+
+// Per-level horizontal gaps (runtime, initialized from config defaults)
+export let levelGaps = null;  // null = use config defaults
+
+export function setLevelGaps(gaps) {
+  levelGaps = gaps;
+}
+
+export function resetLevelGaps() {
+  levelGaps = null;
+}
