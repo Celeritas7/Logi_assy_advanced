@@ -8,7 +8,8 @@ import {
   GROUP_COLORS, STATUS_COLORS, FASTENER_COLORS, SEQUENCE_BADGES,
   NODE_WIDTH_BASE, NODE_WIDTH_MAX,
   getLevelColor, getLevelShape, getLevelFontSize, getLevelFontWeight,
-  getGroupColor, getStatusColor, getFastenerColor, getSequenceBadge
+  getGroupColor, getStatusColor, getFastenerColor, getSequenceBadge,
+  getLevelGap
 } from './config.js';
 import * as state from './state.js';
 import {
@@ -546,7 +547,6 @@ function calculateTreeLayout(nodes, links) {
   // Tree layout settings
   const nodeWidth = 140;
   const nodeHeight = 45;
-  const horizontalGap = 300;
   const verticalGap = 65;
   const groupGap = 40;  // Extra gap between groups
   const headerHeight = 50;
@@ -555,6 +555,30 @@ function calculateTreeLayout(nodes, links) {
   
   // Get levels sorted: highest level on left, L1 on right
   const levels = Object.keys(levelGroups).map(Number).sort((a, b) => b - a);
+  
+  // Compute per-level column X positions using configurable gaps
+  // levels = [highest, ..., 1] e.g. [5, 4, 3, 2, 1]
+  // Column 0 (leftmost) = highest level, last column = L1
+  const columnXMap = {};  // level -> X position
+  let cumulativeX = leftPadding;
+  
+  levels.forEach((level, colIndex) => {
+    columnXMap[level] = cumulativeX;
+    
+    if (colIndex < levels.length - 1) {
+      // Gap to next column: based on the lower of the two adjacent levels
+      // e.g. between L4 and L3 columns, use gap index for L3→L4 (index 2)
+      const nextLevel = levels[colIndex + 1];
+      const lowerLevel = Math.min(level, nextLevel);
+      const gapIndex = lowerLevel - 1;  // L1→L2 = index 0, L2→L3 = index 1, etc.
+      cumulativeX += getLevelGap(gapIndex);
+    }
+  });
+  
+  // Helper to get column X for a level
+  function getColumnX(level) {
+    return columnXMap[level] ?? leftPadding;
+  }
   
   // Build connection maps
   const childToParents = {};
@@ -577,14 +601,12 @@ function calculateTreeLayout(nodes, links) {
   const groups = detectGroups(nodes, links, childToParents, parentToChildren);
   
   if (hasStoredPositions) {
-    // Use stored Y positions but ALWAYS compute X from horizontalGap
-    // This ensures horizontalGap changes take effect even with saved positions
+    // Use stored Y positions but ALWAYS compute X from per-level gaps
     levels.forEach((level, colIndex) => {
       const nodesInLevel = levelGroups[level];
-      const columnX = leftPadding + colIndex * horizontalGap;
+      const columnX = getColumnX(level);
       
       nodesInLevel.forEach((node, rowIndex) => {
-        // Always use computed column X (never stored tree_x)
         const nodeX = columnX;
         const nodeY = node.tree_y != null ? node.tree_y : (topPadding + headerHeight + rowIndex * verticalGap);
         
@@ -610,7 +632,7 @@ function calculateTreeLayout(nodes, links) {
     // Step 2: Initial column X positions
     levels.forEach((level, colIndex) => {
       const nodesInLevel = levelGroups[level];
-      const columnX = leftPadding + colIndex * horizontalGap;
+      const columnX = getColumnX(level);
       
       nodesInLevel.forEach(node => {
         treePositions[node.id] = {
@@ -767,7 +789,8 @@ function calculateTreeLayout(nodes, links) {
   }
   
   // Calculate total dimensions
-  const totalWidth = leftPadding * 2 + (levels.length - 1) * horizontalGap + nodeWidth;
+  const maxColumnX = Math.max(...Object.values(columnXMap));
+  const totalWidth = maxColumnX + leftPadding + nodeWidth;
   const allYValues = Object.values(treePositions).map(p => p.y);
   const maxY = Math.max(...allYValues, topPadding + headerHeight) + 100;
   const totalHeight = Math.max(maxY, topPadding + headerHeight + 200);
@@ -777,7 +800,7 @@ function calculateTreeLayout(nodes, links) {
     levels: levels,
     levelGroups: levelGroups,
     dimensions: { width: totalWidth, height: totalHeight },
-    settings: { horizontalGap, leftPadding, topPadding, headerHeight, nodeWidth },
+    settings: { columnXMap, leftPadding, topPadding, headerHeight, nodeWidth },
     separatorLines: separatorLines,
     groups: groups
   };
@@ -973,10 +996,10 @@ export function renderGraph() {
   // Render level headers if in tree mode and enabled
   if (isTreeMode && treeLayout && state.showLevelHeaders) {
     const { levels, settings } = treeLayout;
-    const { horizontalGap, leftPadding, topPadding } = settings;
+    const { columnXMap, leftPadding, topPadding } = settings;
     
     levels.forEach((level, colIndex) => {
-      const headerX = leftPadding + colIndex * horizontalGap;
+      const headerX = columnXMap[level];
       
       // Create a group for the header (draggable horizontally)
       const headerGroup = g.append('g')
@@ -1032,7 +1055,7 @@ export function renderGraph() {
             const headerPositions = {};
             levels.forEach((lvl, idx) => {
               if (lvl >= thisLevel) {
-                headerPositions[lvl] = leftPadding + idx * horizontalGap;
+                headerPositions[lvl] = columnXMap[lvl];
               }
             });
             d3.select(this).attr('data-header-positions', JSON.stringify(headerPositions));

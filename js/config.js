@@ -101,6 +101,31 @@ export const NODE_WIDTH_BASE = 120;
 export const NODE_WIDTH_MAX = 160;
 
 // ============================================================
+// TREE LAYOUT - Per-Level Horizontal Gaps
+// Gap between level N and level N+1 (in pixels)
+// Index 0 = gap between L1 and L2, Index 1 = gap between L2 and L3, etc.
+// If fewer entries than levels, the last value is repeated.
+// ============================================================
+export const LEVEL_HORIZONTAL_GAPS = [
+  300,  // L1 → L2
+  250,  // L2 → L3
+  220,  // L3 → L4
+  200,  // L4 → L5
+  180,  // L5 → L6
+  160,  // L6 → L7
+  150,  // L7 → L8+
+];
+
+// Helper: Get gap between two adjacent levels
+export function getLevelGap(fromLevelIndex) {
+  if (fromLevelIndex < 0) return 0;
+  if (fromLevelIndex < LEVEL_HORIZONTAL_GAPS.length) {
+    return LEVEL_HORIZONTAL_GAPS[fromLevelIndex];
+  }
+  return LEVEL_HORIZONTAL_GAPS[LEVEL_HORIZONTAL_GAPS.length - 1];
+}
+
+// ============================================================
 // PROJECT STYLING
 // ============================================================
 export const PROJECT_COLORS = [
