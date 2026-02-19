@@ -323,9 +323,14 @@ export async function saveAllPositions() {
         y: node.y
       };
       
-      // Also save tree_y if in tree mode or if it exists
-      if (isTreeMode && (node.treeY != null || node.tree_y != null)) {
-        updateData.tree_y = node.treeY || node.tree_y;
+      // Also save tree positions if in tree mode or if they exist
+      if (isTreeMode) {
+        if (node.treeY != null || node.tree_y != null) {
+          updateData.tree_y = node.treeY || node.tree_y;
+        }
+        if (node.treeX != null) {
+          updateData.tree_x = node.treeX;
+        }
       }
       
       await db.from('logi_nodes').update(updateData).eq('id', node.id);
