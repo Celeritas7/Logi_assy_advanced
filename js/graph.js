@@ -49,7 +49,7 @@ export function zoomOut() {
   svg.transition().duration(300).call(zoomBehavior.scaleBy, 0.7);
 }
 
-export function fitToScreen() {
+export function fitToScreen(instant = false) {
   if (state.nodes.length === 0) return;
   
   const container = document.getElementById('treeContainer');
@@ -76,8 +76,8 @@ export function fitToScreen() {
   const scale = Math.min(
     containerWidth / contentWidth,
     containerHeight / contentHeight,
-    1.5 // Max zoom for fit
-  ) * 0.9; // 90% to add some padding
+    1.5
+  ) * 0.9;
   
   const centerX = (minX + maxX) / 2;
   const centerY = (minY + maxY) / 2;
@@ -89,7 +89,11 @@ export function fitToScreen() {
     .translate(translateX, translateY)
     .scale(scale);
   
-  svg.transition().duration(500).call(zoomBehavior.transform, transform);
+  if (instant) {
+    svg.call(zoomBehavior.transform, transform);
+  } else {
+    svg.transition().duration(500).call(zoomBehavior.transform, transform);
+  }
 }
 
 export function resetView() {
@@ -906,48 +910,6 @@ function spreadNodesInLevel(nodesInLevel, treePositions, startY, gap) {
 }
 
 // ============================================================
-// PARALLEL SEQUENCE TAGS (1a, 1b, 1c for same-sequence siblings)
-// ============================================================
-function computeParallelTag(node) {
-  const seqNum = node.sequence_num;
-  if (!seqNum || seqNum <= 0) return '';
-  
-  // Find all parents this node goes into
-  const parentIds = node.goesInto || [];
-  
-  if (parentIds.length === 0) {
-    // Root node or orphan - check all nodes at same level with same seq
-    const siblings = state.nodes.filter(n => 
-      n.id !== node.id && 
-      n.sequence_num === seqNum && 
-      n.level === node.level &&
-      (n.goesInto || []).length === 0
-    );
-    
-    if (siblings.length === 0) return `${seqNum}`;
-    
-    // Sort by name for consistent lettering
-    const allWithSeq = [node, ...siblings].sort((a, b) => a.name.localeCompare(b.name));
-    const idx = allWithSeq.findIndex(n => n.id === node.id);
-    return `${seqNum}${String.fromCharCode(97 + idx)}`;  // 97 = 'a'
-  }
-  
-  // Find siblings: other nodes that share at least one parent AND same sequence_num
-  const siblings = state.nodes.filter(n => {
-    if (n.id === node.id || n.sequence_num !== seqNum) return false;
-    const nParents = n.goesInto || [];
-    return nParents.some(pid => parentIds.includes(pid));
-  });
-  
-  if (siblings.length === 0) return `${seqNum}`;
-  
-  // Multiple nodes with same seq num under same parent → add letters
-  const allWithSeq = [node, ...siblings].sort((a, b) => a.name.localeCompare(b.name));
-  const idx = allWithSeq.findIndex(n => n.id === node.id);
-  return `${seqNum}${String.fromCharCode(97 + idx)}`;  // 1a, 1b, 1c...
-}
-
-// ============================================================
 // RENDER GRAPH
 // ============================================================
 export function renderGraph() {
@@ -1049,8 +1011,7 @@ export function renderGraph() {
   // Either fit-to-screen (after spacing change) or restore previous zoom
   if (_fitAfterRender) {
     _fitAfterRender = false;
-    // Small delay to ensure DOM is ready
-    setTimeout(() => fitToScreen(), 50);
+    fitToScreen(true);  // Instant - no animation, no disappearing
   } else if (savedTransform && savedTransform !== d3.zoomIdentity) {
     const svgEl = d3.select('#treeSvg');
     svgEl.call(zoomBehavior.transform, savedTransform);
@@ -1435,18 +1396,15 @@ export function renderGraph() {
         .text(d.part_number);
     }
     
-    // Sequence badge - parallel tags (1a, 1b, 1c for nodes sharing same seq number)
+    // Sequence badge - plain number display
     if (d.sequence_num != null && d.sequence_num > 0 && state.showSequenceNumbers) {
-      // Compute parallel tag: find siblings (same parent) with same sequence_num
-      const tag = computeParallelTag(d);
-      
       group.append('text')
         .attr('class', 'sequence-number')
         .attr('x', nodeW/2 + 8)
         .attr('y', -nodeH/2 + 4)
         .attr('text-anchor', 'start')
         .attr('font-size', isTreeMode ? '14px' : '16px')
-        .text(tag);
+        .text(d.sequence_num);
     }
   });
   
@@ -2126,7 +2084,7 @@ function openNodeEditPanel(node) {
         <input type="number" class="form-input" id="nodeEditGroup" value="${node.group_num || 0}" min="0">
       </div>
       <div class="form-group">
-        <label class="form-label">Sequence <span style="font-weight:normal;font-size:10px;color:#888;">(same # = parallel → auto a,b,c)</span></label>
+        <label class="form-label">Sequence</label>
         <input type="number" class="form-input" id="nodeEditSeq" value="${node.sequence_num || 0}" min="0">
       </div>
     </div>
