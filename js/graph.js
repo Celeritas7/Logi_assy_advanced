@@ -1396,15 +1396,16 @@ export function renderGraph() {
         .text(d.part_number);
     }
     
-    // Sequence badge - plain number display
-    if (d.sequence_num != null && d.sequence_num > 0 && state.showSequenceNumbers) {
+    // Sequence badge - show sequence_tag (e.g. "1a") or fallback to sequence_num
+    const seqDisplay = d.sequence_tag || (d.sequence_num > 0 ? String(d.sequence_num) : null);
+    if (seqDisplay && state.showSequenceNumbers) {
       group.append('text')
         .attr('class', 'sequence-number')
         .attr('x', nodeW/2 + 8)
         .attr('y', -nodeH/2 + 4)
         .attr('text-anchor', 'start')
         .attr('font-size', isTreeMode ? '14px' : '16px')
-        .text(d.sequence_num);
+        .text(seqDisplay);
     }
   });
   
@@ -2084,8 +2085,8 @@ function openNodeEditPanel(node) {
         <input type="number" class="form-input" id="nodeEditGroup" value="${node.group_num || 0}" min="0">
       </div>
       <div class="form-group">
-        <label class="form-label">Sequence</label>
-        <input type="number" class="form-input" id="nodeEditSeq" value="${node.sequence_num || 0}" min="0">
+        <label class="form-label">Sequence Tag</label>
+        <input type="text" class="form-input" id="nodeEditSeqTag" value="${escapeHtml(node.sequence_tag || '')}" placeholder="e.g. 1a, 2b">
       </div>
     </div>
     <div class="form-group">
@@ -2112,7 +2113,8 @@ async function saveNodeEdit(nodeId) {
     status: document.getElementById('nodeEditStatus').value,
     qty: parseInt(document.getElementById('nodeEditQty').value) || 1,
     group_num: parseInt(document.getElementById('nodeEditGroup').value) || 0,
-    sequence_num: parseInt(document.getElementById('nodeEditSeq').value) || 0,
+    sequence_num: parseInt(document.getElementById('nodeEditSeqTag').value) || 0,
+    sequence_tag: document.getElementById('nodeEditSeqTag').value.trim() || null,
     notes: document.getElementById('nodeEditNotes').value.trim() || null,
     updated_at: new Date().toISOString()
   };
