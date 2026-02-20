@@ -191,9 +191,6 @@ export async function loadAssemblyData(assemblyId) {
   // Debug: Log level assignments
   console.log('Levels:', state.nodes.map(n => `${n.name}: L${n.level}`).join(', '));
   
-  // Load saved spacing for this assembly
-  loadSavedSpacing();
-  
   // Render
   renderGraph();
   
@@ -902,48 +899,6 @@ function spreadNodesInLevel(nodesInLevel, treePositions, startY, gap) {
 }
 
 // ============================================================
-// PARALLEL SEQUENCE TAGS (1a, 1b, 1c for same-sequence siblings)
-// ============================================================
-function computeParallelTag(node) {
-  const seqNum = node.sequence_num;
-  if (!seqNum || seqNum <= 0) return '';
-  
-  // Find all parents this node goes into
-  const parentIds = node.goesInto || [];
-  
-  if (parentIds.length === 0) {
-    // Root node or orphan - check all nodes at same level with same seq
-    const siblings = state.nodes.filter(n => 
-      n.id !== node.id && 
-      n.sequence_num === seqNum && 
-      n.level === node.level &&
-      (n.goesInto || []).length === 0
-    );
-    
-    if (siblings.length === 0) return `${seqNum}`;
-    
-    // Sort by name for consistent lettering
-    const allWithSeq = [node, ...siblings].sort((a, b) => a.name.localeCompare(b.name));
-    const idx = allWithSeq.findIndex(n => n.id === node.id);
-    return `${seqNum}${String.fromCharCode(97 + idx)}`;  // 97 = 'a'
-  }
-  
-  // Find siblings: other nodes that share at least one parent AND same sequence_num
-  const siblings = state.nodes.filter(n => {
-    if (n.id === node.id || n.sequence_num !== seqNum) return false;
-    const nParents = n.goesInto || [];
-    return nParents.some(pid => parentIds.includes(pid));
-  });
-  
-  if (siblings.length === 0) return `${seqNum}`;
-  
-  // Multiple nodes with same seq num under same parent → add letters
-  const allWithSeq = [node, ...siblings].sort((a, b) => a.name.localeCompare(b.name));
-  const idx = allWithSeq.findIndex(n => n.id === node.id);
-  return `${seqNum}${String.fromCharCode(97 + idx)}`;  // 1a, 1b, 1c...
-}
-
-// ============================================================
 // RENDER GRAPH
 // ============================================================
 export function renderGraph() {
@@ -1420,18 +1375,15 @@ export function renderGraph() {
         .text(d.part_number);
     }
     
-    // Sequence badge - parallel tags (1a, 1b, 1c for nodes sharing same seq number)
+    // Sequence badge - black text, top-right corner, 16px
     if (d.sequence_num != null && d.sequence_num > 0 && state.showSequenceNumbers) {
-      // Compute parallel tag: find siblings (same parent) with same sequence_num
-      const tag = computeParallelTag(d);
-      
       group.append('text')
         .attr('class', 'sequence-number')
         .attr('x', nodeW/2 + 8)
         .attr('y', -nodeH/2 + 4)
         .attr('text-anchor', 'start')
         .attr('font-size', isTreeMode ? '14px' : '16px')
-        .text(tag);
+        .text(d.sequence_num);
     }
   });
   
@@ -2111,7 +2063,7 @@ function openNodeEditPanel(node) {
         <input type="number" class="form-input" id="nodeEditGroup" value="${node.group_num || 0}" min="0">
       </div>
       <div class="form-group">
-        <label class="form-label">Sequence <span style="font-weight:normal;font-size:10px;color:#888;">(same # = parallel → auto a,b,c)</span></label>
+        <label class="form-label">Sequence</label>
         <input type="number" class="form-input" id="nodeEditSeq" value="${node.sequence_num || 0}" min="0">
       </div>
     </div>
@@ -2163,77 +2115,66 @@ async function saveNodeEdit(nodeId) {
 }
 
 // ============================================================
-// SPACING SETTINGS PANEL (Floating Right Side)
+// SPACING SETTINGS MODAL
 // ============================================================
-
-// Load saved spacing for current assembly from localStorage
-function loadSavedSpacing() {
-  if (!state.currentAssemblyId) return;
-  try {
-    const key = `logi_spacing_${state.currentAssemblyId}`;
-    const saved = localStorage.getItem(key);
-    if (saved) {
-      state.setLevelGaps(JSON.parse(saved));
-    }
-  } catch (e) {
-    console.warn('Failed to load spacing:', e);
-  }
-}
-
-// Save spacing for current assembly to localStorage
-function saveSpacingToStorage() {
-  if (!state.currentAssemblyId || !state.levelGaps) return;
-  try {
-    const key = `logi_spacing_${state.currentAssemblyId}`;
-    localStorage.setItem(key, JSON.stringify(state.levelGaps));
-  } catch (e) {
-    console.warn('Failed to save spacing:', e);
-  }
-}
-
 function openSpacingSettings() {
   if (!state.isAdmin) return;
   
-  const panel = document.getElementById('spacingPanel');
-  const body = document.getElementById('spacingPanelBody');
-  
-  // Determine how many levels exist
+  // Determine how many levels exist in current assembly
   const maxLevel = Math.max(1, ...state.nodes.map(n => n.level || 1));
   const numGaps = Math.max(maxLevel - 1, 1);
-  window._spacingNumGaps = numGaps;
   
-  // Build slider rows
-  let html = '';
+  // Build slider rows for each gap
+  let slidersHtml = '';
   for (let i = 0; i < numGaps; i++) {
     const currentGap = (state.levelGaps && state.levelGaps[i] != null)
       ? state.levelGaps[i]
       : (LEVEL_HORIZONTAL_GAPS[i] != null ? LEVEL_HORIZONTAL_GAPS[i] : LEVEL_HORIZONTAL_GAPS[LEVEL_HORIZONTAL_GAPS.length - 1]);
     
-    html += `
-      <div class="spacing-row">
-        <label>L${i + 1} ↔ L${i + 2}</label>
+    slidersHtml += `
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+        <label style="min-width:75px;font-weight:600;font-size:13px;color:#333;">
+          L${i + 1} ↔ L${i + 2}
+        </label>
         <input type="range" id="spacingSlider_${i}" 
           min="80" max="500" value="${currentGap}" step="10"
-          oninput="document.getElementById('spacingValue_${i}').value=this.value; window._previewSpacing();">
+          style="flex:1;cursor:pointer;"
+          oninput="document.getElementById('spacingValue_${i}').value = this.value; window._previewSpacing();">
         <input type="number" id="spacingValue_${i}" 
           min="80" max="500" value="${currentGap}" step="10"
-          oninput="document.getElementById('spacingSlider_${i}').value=this.value; window._previewSpacing();">
-        <span class="spacing-unit">px</span>
+          style="width:60px;text-align:center;padding:4px;border:1px solid #ccc;border-radius:4px;font-size:13px;"
+          oninput="document.getElementById('spacingSlider_${i}').value = this.value; window._previewSpacing();">
+        <span style="font-size:11px;color:#888;">px</span>
       </div>
     `;
   }
   
-  body.innerHTML = html;
-  panel.classList.add('open');
+  const content = `
+    <div style="margin-bottom:12px;font-size:12px;color:#666;">
+      Adjust the horizontal gap between each level pair. Changes preview live.
+    </div>
+    <div id="spacingSliders">
+      ${slidersHtml}
+    </div>
+    <div style="margin-top:12px;display:flex;gap:8px;">
+      <button class="btn-secondary" style="padding:6px 12px;font-size:12px;border-radius:4px;cursor:pointer;border:1px solid #ccc;background:#f5f5f5;" 
+        onclick="window._resetSpacingDefaults()">↺ Reset Defaults</button>
+      <button class="btn-secondary" style="padding:6px 12px;font-size:12px;border-radius:4px;cursor:pointer;border:1px solid #ccc;background:#f5f5f5;" 
+        onclick="window._equalizeSpacing()">= Equal Spacing</button>
+    </div>
+  `;
+  
+  showModal('↔️ Level Spacing', content, [
+    { label: 'Cancel', class: 'btn-secondary', action: () => { _revertSpacing(); hideModal(); } },
+    { label: 'Apply', class: 'btn-primary', action: () => { _applySpacing(); hideModal(); } }
+  ]);
+  
+  // Store pre-edit gaps for cancel/revert
+  window._spacingBackup = state.levelGaps ? [...state.levelGaps] : null;
+  window._spacingNumGaps = numGaps;
 }
 
-function closeSpacingPanel() {
-  document.getElementById('spacingPanel').classList.remove('open');
-  // Auto-save on close
-  saveSpacingToStorage();
-}
-
-// Preview spacing live
+// Preview spacing live as sliders change
 function _previewSpacing() {
   const numGaps = window._spacingNumGaps || 1;
   const gaps = [];
@@ -2244,7 +2185,18 @@ function _previewSpacing() {
   }
   
   state.setLevelGaps(gaps);
-  saveSpacingToStorage();
+  renderGraph();
+}
+
+// Apply and close
+function _applySpacing() {
+  _previewSpacing();  // Ensure latest values are applied
+  showToast('Spacing updated', 'success');
+}
+
+// Revert to backup on cancel
+function _revertSpacing() {
+  state.setLevelGaps(window._spacingBackup);
   renderGraph();
 }
 
@@ -2263,16 +2215,17 @@ function _resetSpacingDefaults() {
   _previewSpacing();
 }
 
-// Set all gaps equal
+// Set all gaps to the same value
 function _equalizeSpacing() {
   const numGaps = window._spacingNumGaps || 1;
-  let total = 0;
   
+  // Use the average of current values
+  let total = 0;
   for (let i = 0; i < numGaps; i++) {
     const slider = document.getElementById(`spacingSlider_${i}`);
     total += slider ? parseInt(slider.value) : 200;
   }
-  const avg = Math.round(total / numGaps / 10) * 10;
+  const avg = Math.round(total / numGaps / 10) * 10;  // Round to nearest 10
   
   for (let i = 0; i < numGaps; i++) {
     const slider = document.getElementById(`spacingSlider_${i}`);
@@ -2286,7 +2239,6 @@ function _equalizeSpacing() {
 
 // Export to window
 window.openSpacingSettings = openSpacingSettings;
-window.closeSpacingPanel = closeSpacingPanel;
 window._previewSpacing = _previewSpacing;
 window._resetSpacingDefaults = _resetSpacingDefaults;
 window._equalizeSpacing = _equalizeSpacing;
