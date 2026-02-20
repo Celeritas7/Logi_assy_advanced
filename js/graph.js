@@ -23,6 +23,7 @@ import {
 // ============================================================
 let zoomBehavior = null;
 let currentTransform = d3.zoomIdentity;
+let _fitAfterRender = false;  // Flag: fit to screen after next render
 
 export function initZoom() {
   const svg = d3.select('#treeSvg');
@@ -53,15 +54,18 @@ export function fitToScreen() {
   
   const container = document.getElementById('treeContainer');
   const svg = d3.select('#treeSvg');
+  const isTreeMode = state.currentLayoutMode === 'tree';
   
-  // Calculate bounds of all nodes
+  // Calculate bounds of all visible nodes
   let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
   state.nodes.forEach(n => {
     if (n.deleted) return;
-    minX = Math.min(minX, (n.x || 400) - 80);
-    maxX = Math.max(maxX, (n.x || 400) + 80);
-    minY = Math.min(minY, (n.y || 300) - 40);
-    maxY = Math.max(maxY, (n.y || 300) + 40);
+    const nx = isTreeMode ? (n.treeX ?? n.x ?? 400) : (n.x ?? 400);
+    const ny = isTreeMode ? (n.treeY ?? n.y ?? 300) : (n.y ?? 300);
+    minX = Math.min(minX, nx - 80);
+    maxX = Math.max(maxX, nx + 80);
+    minY = Math.min(minY, ny - 40);
+    maxY = Math.max(maxY, ny + 40);
   });
   
   const contentWidth = maxX - minX;
@@ -1038,8 +1042,19 @@ export function renderGraph() {
   const g = svg.append('g')
     .attr('class', 'zoom-group');
   
-  // Initialize zoom behavior
+  // Initialize zoom behavior - save and restore current transform
+  const savedTransform = currentTransform;
   initZoom();
+  
+  // Either fit-to-screen (after spacing change) or restore previous zoom
+  if (_fitAfterRender) {
+    _fitAfterRender = false;
+    // Small delay to ensure DOM is ready
+    setTimeout(() => fitToScreen(), 50);
+  } else if (savedTransform && savedTransform !== d3.zoomIdentity) {
+    const svgEl = d3.select('#treeSvg');
+    svgEl.call(zoomBehavior.transform, savedTransform);
+  }
   
   // Render level headers if in tree mode and enabled
   if (isTreeMode && treeLayout && state.showLevelHeaders) {
@@ -2233,19 +2248,24 @@ function closeSpacingPanel() {
   saveSpacingToStorage();
 }
 
-// Preview spacing live
+// Preview spacing live (debounced)
+let _spacingDebounce = null;
 function _previewSpacing() {
-  const numGaps = window._spacingNumGaps || 1;
-  const gaps = [];
-  
-  for (let i = 0; i < numGaps; i++) {
-    const slider = document.getElementById(`spacingSlider_${i}`);
-    gaps.push(slider ? parseInt(slider.value) : 200);
-  }
-  
-  state.setLevelGaps(gaps);
-  saveSpacingToStorage();
-  renderGraph();
+  clearTimeout(_spacingDebounce);
+  _spacingDebounce = setTimeout(() => {
+    const numGaps = window._spacingNumGaps || 1;
+    const gaps = [];
+    
+    for (let i = 0; i < numGaps; i++) {
+      const slider = document.getElementById(`spacingSlider_${i}`);
+      gaps.push(slider ? parseInt(slider.value) : 200);
+    }
+    
+    state.setLevelGaps(gaps);
+    saveSpacingToStorage();
+    _fitAfterRender = true;  // Fit to screen after re-render so tree stays visible
+    renderGraph();
+  }, 150);
 }
 
 // Reset to config.js defaults
