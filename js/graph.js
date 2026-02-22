@@ -1232,7 +1232,7 @@ export function renderGraph() {
       pathD = calculateLinkPath(source, target);
     }
     
-    group.append('path')
+    const pathEl = group.append('path')
       .attr('class', 'link')
       .attr('d', pathD)
       .attr('stroke', fastenerColor)
@@ -1245,12 +1245,13 @@ export function renderGraph() {
         showLinkContextMenu(e.clientX, e.clientY, linkData);
       });
     
-    // Link label positioned along the path using label_position (0.0 to 1.0)
-    const t = linkData.label_position ?? 0.5;  // Default: midpoint
-    
-    // Interpolate position along the link
-    const labelX = sourceX + (targetX - sourceX) * t;
-    const labelY = sourceY + (targetY - sourceY) * t;
+    // Link label positioned along the ACTUAL curve path using label_position (0.0 to 1.0)
+    const t = linkData.label_position ?? 0.5;
+    const pathNode = pathEl.node();
+    const totalLen = pathNode.getTotalLength();
+    const pt = pathNode.getPointAtLength(t * totalLen);
+    const labelX = pt.x;
+    const labelY = pt.y;
     
     const hasLabel = linkData.fastener || linkData.loctite || linkData.torque_value;
     
@@ -1336,10 +1337,12 @@ export function renderGraph() {
       });
     }
     
-    // Make label draggable along the link path (admin only)
+    // Make label draggable along the ACTUAL curve path (admin only)
     if (state.isAdmin && hasLabel) {
-      const sX = sourceX, sY = sourceY, tX = targetX, tY = targetY;
+      const thisPathNode = pathNode;
       const thisLinkData = linkData;
+      const thisLabelWidth = labelWidth;
+      const thisLabelHeight = labelHeight;
       
       const labelDrag = d3.drag()
         .on('start', function(event) {
@@ -1350,43 +1353,62 @@ export function renderGraph() {
           labelGroup.attr('data-dragged', 'true');
           
           // Get mouse position in SVG coordinates
-          const g = d3.select('g.zoom-group');
           const transform = currentTransform;
           const mouseX = (event.sourceEvent.offsetX - transform.x) / transform.k;
           const mouseY = (event.sourceEvent.offsetY - transform.y) / transform.k;
           
-          // Project mouse position onto the line segment to get t (0-1)
-          const dx = tX - sX;
-          const dy = tY - sY;
-          const lenSq = dx * dx + dy * dy;
-          let newT = lenSq > 0 ? ((mouseX - sX) * dx + (mouseY - sY) * dy) / lenSq : 0.5;
-          newT = Math.max(0.05, Math.min(0.95, newT));  // Clamp to avoid edges
+          // Find closest point on the actual path by sampling
+          const pathLen = thisPathNode.getTotalLength();
+          const SAMPLES = 50;
+          let bestDist = Infinity;
+          let bestT = 0.5;
           
-          // Update position
-          const newX = sX + dx * newT;
-          const newY = sY + dy * newT;
+          for (let s = 0; s <= SAMPLES; s++) {
+            const fraction = s / SAMPLES;
+            const p = thisPathNode.getPointAtLength(fraction * pathLen);
+            const dist = (p.x - mouseX) ** 2 + (p.y - mouseY) ** 2;
+            if (dist < bestDist) {
+              bestDist = dist;
+              bestT = fraction;
+            }
+          }
+          
+          // Refine with finer sampling around bestT
+          const refineLow = Math.max(0, bestT - 1 / SAMPLES);
+          const refineHigh = Math.min(1, bestT + 1 / SAMPLES);
+          for (let s = 0; s <= 20; s++) {
+            const fraction = refineLow + (refineHigh - refineLow) * s / 20;
+            const p = thisPathNode.getPointAtLength(fraction * pathLen);
+            const dist = (p.x - mouseX) ** 2 + (p.y - mouseY) ** 2;
+            if (dist < bestDist) {
+              bestDist = dist;
+              bestT = fraction;
+            }
+          }
+          
+          bestT = Math.max(0.05, Math.min(0.95, bestT));
+          
+          // Get point on actual curve
+          const newPt = thisPathNode.getPointAtLength(bestT * pathLen);
           
           // Move the label group
           d3.select(this).select('.link-label-bg')
-            .attr('x', newX - labelWidth / 2)
-            .attr('y', newY - labelHeight / 2);
+            .attr('x', newPt.x - thisLabelWidth / 2)
+            .attr('y', newPt.y - thisLabelHeight / 2);
           
           d3.select(this).selectAll('.link-label').each(function() {
             const offsetY = parseFloat(d3.select(this).attr('data-dy')) || 0;
-            d3.select(this).attr('x', newX).attr('y', newY + offsetY);
+            d3.select(this).attr('x', newPt.x).attr('y', newPt.y + offsetY);
           });
           
-          // Store new t
-          d3.select(this).attr('data-current-t', newT);
+          d3.select(this).attr('data-current-t', bestT);
         })
         .on('end', async function() {
           d3.select(this).select('.link-label-bg').style('cursor', 'grab');
           const newT = parseFloat(d3.select(this).attr('data-current-t'));
           if (newT && !isNaN(newT)) {
-            // Save to database
             try {
               await db.from('logi_links').update({ label_position: newT }).eq('id', thisLinkData.id);
-              // Update local data
               const link = state.links.find(l => l.id === thisLinkData.id);
               if (link) link.label_position = newT;
             } catch (e) {
@@ -1749,25 +1771,26 @@ function updateAllTreeLinks() {
     // Update path
     path.attr('d', `M ${sx} ${sy} C ${midXPath} ${sy}, ${midXPath} ${ty}, ${tx} ${ty}`);
     
-    // Update label position using label_position (t value)
+    // Get point on actual updated path curve
+    const pathNode = path.node();
     const t = linkData.label_position ?? 0.5;
-    const newLabelX = sourceX + (targetX - sourceX) * t;
-    const newLabelY = sourceY + (targetY - sourceY) * t;
+    const totalLen = pathNode.getTotalLength();
+    const pt = pathNode.getPointAtLength(t * totalLen);
     
-    // Move label group
+    // Move label group to point on curve
     const labelGroup = group.select('.link-label-group');
     if (labelGroup.size()) {
       const labelBg = labelGroup.select('.link-label-bg');
       if (labelBg.size()) {
         const width = parseFloat(labelBg.attr('width')) || 30;
         const height = parseFloat(labelBg.attr('height')) || 20;
-        labelBg.attr('x', newLabelX - width / 2).attr('y', newLabelY - height / 2);
+        labelBg.attr('x', pt.x - width / 2).attr('y', pt.y - height / 2);
       }
       
       labelGroup.selectAll('.link-label').each(function() {
         const label = d3.select(this);
         const dy = parseFloat(label.attr('data-dy')) || 0;
-        label.attr('x', newLabelX).attr('y', newLabelY + dy);
+        label.attr('x', pt.x).attr('y', pt.y + dy);
       });
     }
   });
@@ -1946,13 +1969,14 @@ function setupForceSimulation(visibleNodes, visibleLinks) {
         if (!source || !target) return;
         
         // Use curved Bezier path
-        d3.select(this).select('.link')
-          .attr('d', calculateLinkPath(source, target));
+        const pathSel = d3.select(this).select('.link');
+        pathSel.attr('d', calculateLinkPath(source, target));
         
-        // Update label positions using label_position
+        // Get point on actual curve for label position
+        const pathNode = pathSel.node();
         const t = linkData.label_position ?? 0.5;
-        const labelPosX = source.x + (target.x - source.x) * t;
-        const labelPosY = source.y + (target.y - source.y) * t;
+        const pathLen = pathNode.getTotalLength();
+        const pt = pathNode.getPointAtLength(t * pathLen);
         
         // Get label group and adjust position
         const labelGroup = d3.select(this).select('.link-label-group');
@@ -1962,8 +1986,8 @@ function setupForceSimulation(visibleNodes, visibleLinks) {
             const bgWidth = parseFloat(labelBg.attr('width')) || 50;
             const bgHeight = parseFloat(labelBg.attr('height')) || 16;
             labelBg
-              .attr('x', labelPosX - bgWidth / 2)
-              .attr('y', labelPosY - bgHeight / 2);
+              .attr('x', pt.x - bgWidth / 2)
+              .attr('y', pt.y - bgHeight / 2);
           }
           
           const labels = labelGroup.selectAll('.link-label');
@@ -1973,8 +1997,8 @@ function setupForceSimulation(visibleNodes, visibleLinks) {
           
           labels.each(function(d, i) {
             d3.select(this)
-              .attr('x', labelPosX)
-              .attr('y', labelPosY - totalHeight / 2 + 10 + (i * lineHeight));
+              .attr('x', pt.x)
+              .attr('y', pt.y - totalHeight / 2 + 10 + (i * lineHeight));
           });
         }
       });
