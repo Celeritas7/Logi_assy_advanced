@@ -1245,10 +1245,12 @@ export function renderGraph() {
         showLinkContextMenu(e.clientX, e.clientY, linkData);
       });
     
-    // Link label at midpoint (Fastener, Loctite, Torque)
-    // Always show a clickable area even if no label data
-    const midX = (sourceX + targetX) / 2;
-    const midY = (sourceY + targetY) / 2;
+    // Link label positioned along the path using label_position (0.0 to 1.0)
+    const t = linkData.label_position ?? 0.5;  // Default: midpoint
+    
+    // Interpolate position along the link
+    const labelX = sourceX + (targetX - sourceX) * t;
+    const labelY = sourceY + (targetY - sourceY) * t;
     
     const hasLabel = linkData.fastener || linkData.loctite || linkData.torque_value;
     
@@ -1275,19 +1277,28 @@ export function renderGraph() {
     const labelWidth = hasLabel ? Math.max(55, ...lines.map(l => l.text.length * 6 + 12)) : 30;
     
     // Background rect - only visible if has label, but always clickable for admin
-    group.append('rect')
+    const labelGroup = group.append('g')
+      .attr('class', 'link-label-group')
+      .attr('data-link-id', linkData.id);
+    
+    labelGroup.append('rect')
       .attr('class', 'link-label-bg link-clickable')
-      .attr('x', midX - labelWidth / 2)
-      .attr('y', midY - labelHeight / 2)
+      .attr('x', labelX - labelWidth / 2)
+      .attr('y', labelY - labelHeight / 2)
       .attr('width', labelWidth)
       .attr('height', labelHeight)
       .attr('rx', 3)
       .attr('data-has-label', hasLabel ? 'true' : 'false')
-      .style('cursor', state.isAdmin ? 'pointer' : 'default')
+      .style('cursor', state.isAdmin ? (hasLabel ? 'grab' : 'pointer') : 'default')
       .style('fill', hasLabel ? 'white' : 'transparent')
       .style('opacity', hasLabel ? 0.95 : 0)
       .on('click', (e) => {
         if (!state.isAdmin) return;
+        // Only open editor if not dragging
+        if (labelGroup.attr('data-dragged') === 'true') {
+          labelGroup.attr('data-dragged', null);
+          return;
+        }
         e.stopPropagation();
         window.editLinkFastener(linkData.id);
       })
@@ -1305,18 +1316,17 @@ export function renderGraph() {
         d3.select(this).style('opacity', hasLabel ? 0.95 : 0).attr('stroke', 'none');
       });
     
-    // Render label text lines with stored offsets for repositioning
+    // Render label text lines
     if (hasLabel) {
       lines.forEach((line, i) => {
-        // Calculate offset from center
         const totalLabelHeight = lines.length * lineHeight;
         const lineOffsetFromCenter = -totalLabelHeight / 2 + 6 + (i * lineHeight);
         
-        group.append('text')
+        labelGroup.append('text')
           .attr('class', 'link-label')
-          .attr('x', midX)
-          .attr('y', midY + lineOffsetFromCenter)
-          .attr('data-dy', lineOffsetFromCenter)  // Store offset for repositioning
+          .attr('x', labelX)
+          .attr('y', labelY + lineOffsetFromCenter)
+          .attr('data-dy', lineOffsetFromCenter)
           .attr('text-anchor', 'middle')
           .attr('fill', line.color)
           .attr('font-weight', line.bold ? '600' : '400')
@@ -1324,6 +1334,71 @@ export function renderGraph() {
           .style('pointer-events', 'none')
           .text(line.text);
       });
+    }
+    
+    // Make label draggable along the link path (admin only)
+    if (state.isAdmin && hasLabel) {
+      const sX = sourceX, sY = sourceY, tX = targetX, tY = targetY;
+      const thisLinkData = linkData;
+      
+      const labelDrag = d3.drag()
+        .on('start', function(event) {
+          event.sourceEvent.stopPropagation();
+          d3.select(this).select('.link-label-bg').style('cursor', 'grabbing');
+        })
+        .on('drag', function(event) {
+          labelGroup.attr('data-dragged', 'true');
+          
+          // Get mouse position in SVG coordinates
+          const g = d3.select('g.zoom-group');
+          const transform = currentTransform;
+          const mouseX = (event.sourceEvent.offsetX - transform.x) / transform.k;
+          const mouseY = (event.sourceEvent.offsetY - transform.y) / transform.k;
+          
+          // Project mouse position onto the line segment to get t (0-1)
+          const dx = tX - sX;
+          const dy = tY - sY;
+          const lenSq = dx * dx + dy * dy;
+          let newT = lenSq > 0 ? ((mouseX - sX) * dx + (mouseY - sY) * dy) / lenSq : 0.5;
+          newT = Math.max(0.05, Math.min(0.95, newT));  // Clamp to avoid edges
+          
+          // Update position
+          const newX = sX + dx * newT;
+          const newY = sY + dy * newT;
+          
+          // Move the label group
+          d3.select(this).select('.link-label-bg')
+            .attr('x', newX - labelWidth / 2)
+            .attr('y', newY - labelHeight / 2);
+          
+          d3.select(this).selectAll('.link-label').each(function() {
+            const offsetY = parseFloat(d3.select(this).attr('data-dy')) || 0;
+            d3.select(this).attr('x', newX).attr('y', newY + offsetY);
+          });
+          
+          // Store new t
+          d3.select(this).attr('data-current-t', newT);
+        })
+        .on('end', async function() {
+          d3.select(this).select('.link-label-bg').style('cursor', 'grab');
+          const newT = parseFloat(d3.select(this).attr('data-current-t'));
+          if (newT && !isNaN(newT)) {
+            // Save to database
+            try {
+              await db.from('logi_links').update({ label_position: newT }).eq('id', thisLinkData.id);
+              // Update local data
+              const link = state.links.find(l => l.id === thisLinkData.id);
+              if (link) link.label_position = newT;
+            } catch (e) {
+              console.error('Failed to save label position:', e);
+            }
+          }
+        });
+      
+      labelGroup
+        .on('mousedown', (event) => event.stopPropagation())
+        .on('touchstart', (event) => event.stopPropagation())
+        .call(labelDrag);
     }
   });
   
@@ -1669,29 +1744,32 @@ function updateAllTreeLinks() {
     const sy = sourceY;
     const tx = targetX - targetW / 2;
     const ty = targetY;
-    const midX = (sx + tx) / 2;
+    const midXPath = (sx + tx) / 2;
     
     // Update path
-    path.attr('d', `M ${sx} ${sy} C ${midX} ${sy}, ${midX} ${ty}, ${tx} ${ty}`);
+    path.attr('d', `M ${sx} ${sy} C ${midXPath} ${sy}, ${midXPath} ${ty}, ${tx} ${ty}`);
     
-    // Update label position
-    const newMidX = (sourceX + targetX) / 2;
-    const newMidY = (sy + ty) / 2;
+    // Update label position using label_position (t value)
+    const t = linkData.label_position ?? 0.5;
+    const newLabelX = sourceX + (targetX - sourceX) * t;
+    const newLabelY = sourceY + (targetY - sourceY) * t;
     
-    // Move label background
-    const labelBg = group.select('.link-label-bg');
-    if (labelBg.size()) {
-      const width = parseFloat(labelBg.attr('width')) || 30;
-      const height = parseFloat(labelBg.attr('height')) || 20;
-      labelBg.attr('x', newMidX - width / 2).attr('y', newMidY - height / 2);
+    // Move label group
+    const labelGroup = group.select('.link-label-group');
+    if (labelGroup.size()) {
+      const labelBg = labelGroup.select('.link-label-bg');
+      if (labelBg.size()) {
+        const width = parseFloat(labelBg.attr('width')) || 30;
+        const height = parseFloat(labelBg.attr('height')) || 20;
+        labelBg.attr('x', newLabelX - width / 2).attr('y', newLabelY - height / 2);
+      }
+      
+      labelGroup.selectAll('.link-label').each(function() {
+        const label = d3.select(this);
+        const dy = parseFloat(label.attr('data-dy')) || 0;
+        label.attr('x', newLabelX).attr('y', newLabelY + dy);
+      });
     }
-    
-    // Move all label text elements
-    group.selectAll('.link-label').each(function() {
-      const label = d3.select(this);
-      const dy = parseFloat(label.attr('data-dy')) || 0;
-      label.attr('x', newMidX).attr('y', newMidY + dy);
-    });
   });
 }
 
@@ -1871,31 +1949,34 @@ function setupForceSimulation(visibleNodes, visibleLinks) {
         d3.select(this).select('.link')
           .attr('d', calculateLinkPath(source, target));
         
-        // Update label positions at midpoint
-        const midX = (source.x + target.x) / 2;
-        const midY = (source.y + target.y) / 2;
+        // Update label positions using label_position
+        const t = linkData.label_position ?? 0.5;
+        const labelPosX = source.x + (target.x - source.x) * t;
+        const labelPosY = source.y + (target.y - source.y) * t;
         
-        // Get label background and adjust position
-        const labelBg = d3.select(this).select('.link-label-bg');
-        if (!labelBg.empty()) {
-          const bgWidth = parseFloat(labelBg.attr('width')) || 50;
-          const bgHeight = parseFloat(labelBg.attr('height')) || 16;
-          labelBg
-            .attr('x', midX - bgWidth / 2)
-            .attr('y', midY - bgHeight / 2);
+        // Get label group and adjust position
+        const labelGroup = d3.select(this).select('.link-label-group');
+        if (!labelGroup.empty()) {
+          const labelBg = labelGroup.select('.link-label-bg');
+          if (!labelBg.empty()) {
+            const bgWidth = parseFloat(labelBg.attr('width')) || 50;
+            const bgHeight = parseFloat(labelBg.attr('height')) || 16;
+            labelBg
+              .attr('x', labelPosX - bgWidth / 2)
+              .attr('y', labelPosY - bgHeight / 2);
+          }
+          
+          const labels = labelGroup.selectAll('.link-label');
+          const labelCount = labels.size();
+          const lineHeight = 11;
+          const totalHeight = labelCount * lineHeight + 6;
+          
+          labels.each(function(d, i) {
+            d3.select(this)
+              .attr('x', labelPosX)
+              .attr('y', labelPosY - totalHeight / 2 + 10 + (i * lineHeight));
+          });
         }
-        
-        // Update all label text positions
-        const labels = d3.select(this).selectAll('.link-label');
-        const labelCount = labels.size();
-        const lineHeight = 11;
-        const totalHeight = labelCount * lineHeight + 6;
-        
-        labels.each(function(d, i) {
-          d3.select(this)
-            .attr('x', midX)
-            .attr('y', midY - totalHeight / 2 + 10 + (i * lineHeight));
-        });
       });
     });
   
