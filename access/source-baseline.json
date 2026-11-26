@@ -1,0 +1,12 @@
+{
+  "commit": "c1abf9fa30bec3a97a57a0dbf22cee31ac9ea257",
+  "sha256": {
+    "index.html": "47205cd4600e26fe62cbdafadc474d6aea692ca887d768c2fae9e7ecfc5cf26e",
+    "js/auth.js": "6101c8dd1b44dcf82d1a453a7be31cca127cb12141812e1720e6deb9617c0a00",
+    "js/database.js": "5d61e2febbc8f4258ec029142dffff348ae466b9fbe0e090fb7f59b938d210e2",
+    "js/config.js": "845afa73fc23d486044637947f8a3a7f487fdeef44dd16956ddaa33efed0812d",
+    "js/projects.js": "9345df38c37e4666c3e9dcd28f406fff3cd91d8f09e62a050c3e48c735bbcb8b",
+    "js/assemblies.js": "09701ad637bffcd6ff8b35fb6f2d60b734ace88a15c260f99b00d2da1e1eeaf9",
+    "js/nodes.js": "4989451d2f1feda0114468808582971340f77d9b0877d984cf876694501a80af"
+  }
+}
